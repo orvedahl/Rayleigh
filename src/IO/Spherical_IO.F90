@@ -28,6 +28,7 @@ Module Spherical_IO
     Use Legendre_Transforms, Only : Legendre_Transform
     Use BufferedOutput
     Use Math_Constants
+    Use Sorting
 #ifdef INTEL_COMPILER 
     USE IFPORT
 #endif
@@ -4477,6 +4478,11 @@ Contains
             reverse_grid = .false.
         ENDIF
 
+        ! normalized indices are assumed to be sorted (by abs value), ensure that is true
+        ! all nrm arrays are initialized to -3.0d0 at declaration, ignore these values and
+        ! only sort the user defined nrm values
+        Call Sort(indices_nrm, -3.0d0, ignore_sign=.true.)
+
         ! If needed, convert normalized coordinates to indices
         ! e.g., map [0.1, 0.25, 0.5] to [4, 15, 32]  
         IF (maxval(indices_nrm) .gt. -2.9d0) THEN
@@ -4484,9 +4490,15 @@ Contains
             CALL nrm_to_index(indices_nrm, coord_grid, indices, rev_inds =reverse_grid)
         ENDIF
 
+        ! ensure indices are sorted (by abs value) before any negative indices are handled
+        ! all index arrays are initialized to -1 at declaration, ignore these values and
+        ! only sort the user defined index values
+        Call Sort(indices, -1, ignore_sign=.true.)
+
         ! Next, interpret any range shorthand used.
         ! e.g., convert [1,-4,8] to [1,2,3,4,8]
         Call Parse_Inds(indices)
+
     END SUBROUTINE Interpret_Indices
 
 
