@@ -26,6 +26,8 @@ Module Spherical_IO
     Use General_MPI
     Use Fourier_Transform
     Use Legendre_Transforms, Only : Legendre_Transform
+    Use Controls, Only: global_msgs
+    Use Fields, Only: wsp
     Use BufferedOutput
     Use Math_Constants
 #ifdef INTEL_COMPILER 
@@ -3131,6 +3133,16 @@ Contains
                 Write(funit)simtime
                 Write(funit)this_iter
                 Call Global_Averages%CloseFile() 
+                If (Global_Averages%compute(401) .eq. 1) Then
+                    Do i=1, nq_globav
+                       If (Global_Averages%oqvals(i) .eq. 401) Then
+                           global_msgs(6) = 1.0d0
+                           global_msgs(7) = full_avg(i)
+                           exit
+                       Endif
+                    Enddo
+                Endif
+                Call wsp%load_cargo(global_msgs) ! update cargo with KE data
             Endif
 
         Endif

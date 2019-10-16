@@ -134,7 +134,7 @@ Module Controls
     ! full pool of processes
     Real*8, Allocatable :: global_msgs(:)
     Real*8 :: kill_signal = 0.0d0  ! Signal will be passed in Real*8 buffer, but should be integer-like
-    Integer :: nglobal_msgs = 5  ! timestep, elapsed since checkpoint, kill_signal/global message, simulation time, terminate file found
+    Integer :: nglobal_msgs = 7  ! timestep, elapsed since checkpoint, kill_signal/global message, simulation time, terminate file found, was KE computed, KE
 
 Contains
     Subroutine Initialize_Controls()

@@ -72,12 +72,14 @@ Contains
         Implicit None
         Integer ::  last_iteration, first_iteration,i,iret, sigflag
         Integer :: io=15, ierr
-        Real*8  :: captured_time, max_time_seconds
+        Real*8  :: captured_time, max_time_seconds, messages(1:nglobal_msgs)
         Logical :: terminate_file_exists
         Character*14 :: tmstr
         Character*120 :: dtstr
         Character*120 :: wtmstr
         Character*120 :: istr
+        Character*120 :: kestr
+        Character*120 :: tstr
         !Character(len=*), parameter :: dtfmt ='(ES11.4)', wtmfmt='(ES9.3E1)', &
         Character(len=*), parameter ::   fmtstr = '(F14.4)'
         
@@ -158,6 +160,8 @@ Contains
             global_msgs(3) = killsig
             global_msgs(4) = simulation_time
             If (terminate_file_exists) global_msgs(5) = 1.0d0
+            global_msgs(6) = 0.0d0 ! reset KE data
+            global_msgs(7) = 0.0d0
 
             Call Post_Solve() ! Linear Solve Configuration
 
@@ -165,13 +169,21 @@ Contains
             If (my_rank .eq. 0 .and. mod(iteration,statusline_interval) .eq. 0) Then
                 Write(istr,int_out_fmt)iteration
                 Write(dtstr,sci_note_fmt)deltat
+                Write(tstr,sci_note_fmt)simulation_time-deltat ! KE is one iter old so subtract dt
                 If (stopwatch(walltime)%delta .ne. 0.0d0) Then
                    Write(wtmstr,sci_note_fmt) 1.0d0 / stopwatch(walltime)%delta
                 Else
                    Write(wtmstr,sci_note_fmt) 0.0d0
                 Endif
-                Call stdout%print(' Iteration:  '//Trim(istr)//'   DeltaT: '//Trim(dtstr)//'   Iter/sec: '&
+                Call wsp%unload_cargo(messages) ! pull down KE data
+                If (messages(6) .gt. 0.5d0) Then
+                    Write(kestr,sci_note_fmt) messages(7)
+                    Call stdout%print(' Iteration:  '//Trim(istr)//'   DeltaT: '//Trim(dtstr)//'   Iter/sec: '&
+                   //Trim(wtmstr)//'   Time: '//Trim(tstr)//'   KE: '//Trim(kestr))
+                Else
+                    Call stdout%print(' Iteration:  '//Trim(istr)//'   DeltaT: '//Trim(dtstr)//'   Iter/sec: '&
                    //Trim(wtmstr))
+                Endif
             Endif
             Call rlm_spacea()
 
