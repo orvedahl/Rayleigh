@@ -42,7 +42,7 @@ Program Main!
     Use Sphere_Driver, Only : Main_Loop_Sphere
     Use Timers
 #ifdef USE_SHTns
-    Use Legendre_Transforms, Only : Init_Legendre_Transforms, Finalize_Legendre_Transforms
+    Use Legendre_Transforms, Only : SHTns_Initialize, SHTns_Finalize
 #endif
     Use Fourier_Transform, Only : Initialize_FFTs
     Use Benchmarking, Only : Initialize_Benchmarking, Benchmark_Input_Reset
