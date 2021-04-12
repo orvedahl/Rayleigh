@@ -41,6 +41,9 @@ Program Main!
     Use Sphere_Linear_Terms
     Use Sphere_Driver, Only : Main_Loop_Sphere
     Use Timers
+#ifdef USE_SHTns
+    Use Legendre_Transforms, Only : Init_Legendre_Transforms, Finalize_Legendre_Transforms
+#endif
     Use Fourier_Transform, Only : Initialize_FFTs
     Use Benchmarking, Only : Initialize_Benchmarking, Benchmark_Input_Reset
     Use Run_Parameters, Only : write_run_parameters
@@ -56,6 +59,8 @@ Program Main!
     Call Benchmark_Input_Reset() ! Sets run parameters to benchmark parameters if benchmark_mode .ge. 0
 
     If (test_mode) Then
+        Call Initialize_Controls()
+        Call Set_Math_Constants()
         Call Init_ProblemSize()
         Call Test_Lib()
     Else
@@ -74,6 +79,11 @@ Contains
 
         Call Set_Math_Constants()
         Call Init_ProblemSize()
+
+#ifdef USE_SHTns
+        Call SHTns_Initialize(SHTns_on_the_fly, SHTns_information, SHTns_polar_threshold, &
+                              SHTns_theta_contiguous)
+#endif
 
         Call Initialize_Directory_Structure()
 
@@ -131,6 +141,9 @@ Contains
         If (.not. test_mode) Then
             If (my_rank .eq. 0) Call stdout%finalize()
         Endif
+#ifdef USE_SHTns
+        Call SHTns_Finalize()
+#endif
         Call pfi%exit()
     End Subroutine Finalization
 End Program Main

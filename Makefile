@@ -9,6 +9,18 @@ export LC_COLLATE=C
 # make the CUSTOMROOT variable available to sub-make processes
 export CUSTOMROOT
 
+# run using "make debug=t" to build only the debug version and install it
+ifdef debug
+rayleigh: prepare_directory
+	@$(MAKE) --no-print-directory --directory=$(BUILD) clean_exec
+	@$(MAKE) --no-print-directory --directory=$(BUILD) dbg
+	@echo ""
+	@echo "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
+	@echo "Compilation is complete."
+	@echo " "
+	@$(MAKE) --no-print-directory install
+	@echo ""
+else
 rayleigh: prepare_directory
 	@$(MAKE) --no-print-directory --directory=$(BUILD) clean_exec
 	@$(MAKE) --no-print-directory --directory=$(BUILD) all
@@ -20,6 +32,7 @@ rayleigh: prepare_directory
 	@echo "Run 'make install' to install the rayleigh executables into: "
 	@echo $(PREFIX)"/bin"
 	@echo ""
+endif
 fdeps: prepare_directory
 	$(MAKE) --no-print-directory --directory=$(BUILD) fdeps
 	cp $(BUILD)/Makefile.fdeps $(SRC)/.

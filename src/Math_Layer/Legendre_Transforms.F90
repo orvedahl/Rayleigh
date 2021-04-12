@@ -30,16 +30,36 @@
 Module Legendre_Transforms
     Use Legendre_Polynomials
     Use Structures
+#ifdef USE_SHTns
+    Use iso_c_binding
     !Type, Public :: rmcontainer
     !    Real*8, Allocatable :: data(:,:)
     !End Type rmcontainer
     Implicit None
+
+    ! include the SHTns interfaces
+    Include 'shtns.f03'
+
+    Type(c_ptr) :: SHTns_c             ! main SHTns structure built on initialization
+    Type(SHTns_info), Pointer :: SHTns ! the Fortran friendly main SHTns structure
+
+    Integer :: SHTns_nthreads          ! keep track of how many threads SHTns is using
+
+    ! include FFT normalizations in the Legendre transform
+    Real*8, Allocatable :: PTS_normalization(:), STP_normalization(:)
+
+    Interface Legendre_Transform
+        Module Procedure SHTns_ToSpectral, SHTns_ToPhysical
+    End Interface
+#else
     Interface Legendre_Transform
         Module Procedure PtS_2d_dgpv2, StP_2d_dgp
         Module Procedure PtS_4d_dgpv3, StP_4d_dgp2  ! <<<<<< These are the two legendre transforms that are used in practice (at bottom of file)
     End Interface
+#endif
 Contains
 
+#ifndef USE_SHTns
 Subroutine Test_Legendre
     Implicit None
     Real*8, Allocatable :: theta(:),tmp(:)
@@ -326,12 +346,218 @@ Subroutine Test_Simple_Dgemm2
 
 
 End Subroutine Test_simple_dgemm2
+#endif
 
 
 
 
+#ifdef USE_SHTns
+   Subroutine SHTns_Initialize(on_the_fly, information, polar_threshold, theta_contiguous)
+       Integer, intent(in) :: information
+       Logical, intent(in) :: on_the_fly, theta_contiguous
+       Real*8, intent(in) :: polar_threshold
 
+       Integer :: norm, layout, m_res, m_max, n_phi
 
+       n_phi = 2*n_theta
+       m_max = l_max
+
+       m_res = 1 ! 2*pi/m_res is the azimuthal periodicity, m_max*m_res is max azimuthal order
+
+       ! choose grid, data layout, and Y_l^m normalization --- be consistent with Rayleigh
+       If (on_the_fly) Then
+           layout = SHT_gauss_fly
+       Else
+           layout = SHT_gauss
+       Endif
+       ! we only need the scalar transforms
+       ! Rayleigh has x in (-1,1) & theta in (pi,0) ---> so south pole is first
+       layout = layout + SHT_scalar_only + SHT_south_pole_first
+       if (theta_contiguous) then
+          layout = layout + SHT_theta_contiguous
+       else
+          layout = layout + SHT_phi_contiguous
+       endif
+
+       ! Rayleigh uses the very sane choice of orthonormal Y_l^m
+       norm = SHT_orthonormal
+
+       Call SHTns_verbose(information) ! set how much information SHTns will display
+
+       SHTns_nthreads = SHTns_use_threads(n_threads) ! set OpenMP threads
+
+       ! initialize/allocate transforms and build useful arrays
+       SHTns_c = SHTns_create(l_max, m_max, m_res, norm)
+
+       ! attach a grid to the SHT object & determine optimal algorithm
+       Call SHTns_set_grid(SHTns_c, layout, polar_threshold, n_theta, n_phi)
+
+       ! map the C SHTns structure to the Fortran one
+       Call C_F_pointer(cptr=SHTns_C, fptr=SHTns)
+       !Call C_F_pointer(cptr=SHTns%ct, fptr=costheta, shape=[SHTns%nlat])
+       !Call C_F_pointer(cptr=SHTns%st, fptr=sintheta, shape=[SHTns%nlat])
+
+       ! apply some m-dependent FFT normalizations during the Legendre Transforms
+       Allocate(PTS_normalization(0:l_max), STP_normalization(0:l_max))
+
+       PTS_normalization(0) = 1.0d0/n_phi    ! m=0
+       STP_normalization(0) = 1.0d0
+       PTS_normalization(1:) = 1.0d0/n_theta ! m/=0
+       STP_normalization(1:) = 0.5d0
+
+   End Subroutine SHTns_Initialize
+
+   Subroutine SHTns_Finalize()
+       Call SHTns_unset_grid(SHTns_c)
+       Call SHTns_destroy(SHTns_c)
+       DeAllocate(PTS_normalization, STP_normalization)
+   End Subroutine SHTns_Finalize
+
+   Subroutine SHTns_ToSpectral(data_in, data_out)
+       Real*8, Intent(In) :: data_in(:,:,:)
+       Type(rmcontainer4d), Intent(InOut) :: data_out(1:)
+       ! ingoing data has shape:
+       !   data_out(th,nrhs,lm)
+       !       th = theta (in-processor)
+       !     nrhs = number of RHS elements, stacked over: radius/real/imag/nfields
+       !       lm = mode index (distributed)
+       ! nrhs axis is 1-based indexing, except for radius, ordered: radius-real-imag-field
+       !     index = (r-rlo+1) + (imi-1)*Nr + (f-1)*Nr*2
+       !
+       ! outgoing data has shape:
+       !   data_out(lm)%data(l,r,imi,nf)
+       !       lm = mode index (distributed)
+       !        l = spherical harmonic (in-processor)
+       !        r = radius (distributed)
+       !      imi = real/imag parts
+       !       nf = number of fields
+       Complex*16, Allocatable :: temp_spec(:), temp_phys(:)
+       Complex*16 :: ai, ar
+       Integer :: m, f, r, mode
+       Integer :: ddims(3), oddims(4)
+       Integer :: n_m, nrhs, nfield, rmn, rmx, my_Nr, indr, indi, lind
+       Real*8 :: norm
+
+       ai = (0.0d0, 1.0d0) ! imaginary unit
+       ar = (1.0d0, 0.0d0) ! regular one
+
+       ! find lower/upper bounds of incoming/outgoing data
+       oddims = shape(data_out(1)%data)
+       nfield = oddims(4)
+       rmn = LBOUND(data_out(1)%data,2)
+       rmx = UBOUND(data_out(1)%data,2)
+
+       my_Nr = rmx - rmn + 1
+
+       ddims = shape(data_in)
+       n_m = ddims(3)
+       nrhs = ddims(2)
+
+       Allocate(temp_spec(1:l_max+1), temp_phys(1:n_theta)) ! SHTns expects complex arrays
+
+       Do mode = 1, n_m ! loop over lm modes
+
+           m = m_values(mode) ! extract actual m value
+
+           norm = PTS_normalization(m) ! extract FFT normalizations, based on m
+
+           lind = l_max - m + 1 ! number of modes for this m-value
+
+           Do f = 1, nfield ! number of fields
+               Do r = rmn, rmx ! radius
+
+                   ! package incoming data into complex array at this radius/field
+                   indr = (r-rmn+1) + (f-1)*my_Nr*2
+                   indi = (r-rmn+1) + my_Nr + (f-1)*my_Nr*2
+                   temp_phys(:) = ar*data_in(:,indr,mode) + ai*data_in(:,indi,mode)
+
+                   temp_spec(:) = 0.0d0 ! spectral output is of size (lmax-m+1)
+                   Call spat_to_sh_ml(SHTns_c, m, temp_phys, temp_spec(1:lind), l_max)
+
+                   ! extract results and store in output array
+                   data_out(mode)%data(m:l_max,r,1,f) = norm*real(temp_spec(1:lind))
+                   data_out(mode)%data(m:l_max,r,2,f) = norm*aimag(temp_spec(1:lind))
+
+               Enddo
+           Enddo
+       Enddo
+
+       DeAllocate(temp_spec, temp_phys)
+
+   End Subroutine SHTns_ToSpectral
+
+   Subroutine SHTns_ToPhysical(data_in, data_out)
+       Type(rmcontainer4D), Intent(In) :: data_in(1:)
+       Real*8, Intent(InOut) :: data_out(:,:,:)
+       ! ingoing data has shape:
+       !   data_out(lm)%data(l,r,imi,nf)
+       !       lm = mode index (distributed)
+       !        l = spherical harmonic (in-processor)
+       !        r = radius (distributed)
+       !      imi = real/imag parts
+       !       nf = number of fields
+       !
+       ! outgoing data has shape:
+       !   data_out(th,nrhs,lm)
+       !       th = theta (in-processor)
+       !     nrhs = number of RHS elements, stacked over: radius/real/imag/nfields
+       !       lm = mode index (distributed)
+       Complex*16, Allocatable :: temp_phys(:), temp_spec(:)
+       Complex*16 :: ai, ar
+       Integer :: odims(3), nm, nrhs, my_Nr
+       Integer :: idims(4), nfield, rmn, rmx, mode, m, f, r, ind
+       Real*8 :: norm
+
+       ai = (0.0d0, 1.0d0) ! imaginary unit
+       ar = (1.0d0, 0.0d0) ! regular one
+
+       odims = shape(data_out)
+       nm = odims(3)
+       nrhs = odims(2)
+
+       idims = shape(data_in(1)%data)
+       nfield = idims(4)
+       rmn = LBOUND(data_in(1)%data,2)
+       rmx = UBOUND(data_in(1)%data,2)
+
+       my_Nr = rmx - rmn + 1
+
+       ! build temporary storage spaces
+       allocate(temp_phys(1:n_theta), temp_spec(0:l_max))
+
+       Do mode = 1, nm ! loop over lm modes
+
+           m = m_values(mode) ! extract actual m value
+
+           norm = STP_normalization(m) ! extract FFT normalizations, based on m
+
+           Do f = 1, nfield ! number of fields
+               Do r = rmn, rmx ! radius
+
+                  ! package the input data into a complex array of size lmax-m+1
+                  temp_spec(:) = (0.0d0, 0.0d0)
+                  temp_spec(m:l_max) = ar*data_in(mode)%data(m:l_max,r,1,f) &
+                                     + ai*data_in(mode)%data(m:l_max,r,2,f)
+
+                  temp_phys(:) = (0.0d0, 0.0d0)
+                  Call sh_to_spat_ml(SHTns_c, m, temp_spec(m:l_max), temp_phys, l_max)
+
+                  ! 1-based indexing, except for radius, ordered: radius-real-imag-field
+                  !     index = (r-rlo+1) + (imi-1)*Nr + (f-1)*Nr*2
+                  ind = (r-rmn+1) + (f-1)*my_Nr*2         ! real part for this r/field
+                  data_out(1:n_theta,ind,mode) = norm*real(temp_phys(1:n_theta))
+
+                  ind = (r-rmn+1) + my_Nr + (f-1)*my_Nr*2 ! imag part for this r/field
+                  data_out(1:n_theta,ind,mode) = norm*aimag(temp_phys(1:n_theta))
+
+               Enddo
+           Enddo
+       Enddo
+       deallocate(temp_phys, temp_spec)
+
+   End Subroutine SHTns_ToPhysical
+
+#else
 
 Subroutine PtS_2d_dg(data_in, data_out, nrhs)
     ! Physical-to_Spectral ..2D...DGEMM
@@ -1177,5 +1403,6 @@ Subroutine PtS_4d_dgpv3(data_in, data_out)
     DeAllocate(fodd)
     endif
 End Subroutine PtS_4d_dgpv3
+#endif
 
 End Module Legendre_Transforms

@@ -45,8 +45,18 @@ Module Controls
     Logical :: pad_alltoall = .false.       ! Normally all-to-allv is used.  Standard alltoall with zero padded buffers can be used when this flag is on.
     Logical :: sparsesolve = .false.
 
+    Real*8 :: shtns_polar_threshold = 1.d-10 ! SHTns threshold below which P_l^m is considered zero:
+                                             !     1e-14  VERY safe
+                                             !     1e-10  safe
+                                             !     1e-8   agressive, but still good accuracy
+    Integer :: shtns_information = 0         ! SHTns how much info to write: 0=none, 1=some, 2=debug
+    Logical :: shtns_on_the_fly = .true.     ! SHTns use on-the-fly transforms
+    Logical :: shtns_theta_contiguous = .true. ! SHTns will use theta-contiguous storage
+
     Namelist /Numerical_Controls_Namelist/ chebyshev, bandsolve, static_transpose, static_config, &
-            & use_parity, deriv_cluge, pad_alltoall, sparsesolve
+            & use_parity, deriv_cluge, pad_alltoall, sparsesolve, &
+            & shtns_polar_threshold, shtns_information, &
+            & shtns_on_the_fly, shtns_theta_contiguous
 
     !////////////////////////////////////////////////////////////////////////////////
     ! Physical Controls
@@ -218,13 +228,19 @@ Contains
 
     Subroutine Restore_Numerical_Defaults
         Implicit None
-        chebyshev = .false.
+        chebyshev = .true.
         bandsolve = .false.
         static_transpose = .false.
         static_config = .false.
         use_parity = .true.
         deriv_cluge = .true.
         pad_alltoall = .false.
+        sparsesolve = .false.
+
+        shtns_polar_threshold = 1.d-10
+        shtns_information = 0
+        shtns_on_the_fly = .true.
+        shtns_theta_contiguous = .true.
     End Subroutine Restore_Numerical_Defaults
 
     Subroutine Restore_Temporal_Defaults

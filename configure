@@ -267,6 +267,14 @@ function displayhelp {
     echo "      the standard Rayleigh source files."
     echo ""
 
+    echo "  --with-shtns=<SHTns ROOT>"
+    echo "      Set this flag to specify the location of the SHTns root directory."
+    echo "      To ensure that the root directory is specified properly, verify that"
+    echo "      the following files exist:"
+    echo "          <SHTns ROOT>/include/shtns.f03"
+    echo "          <SHTns ROOT>/lib/libshtns_omp.a"
+    echo ""
+
 }
 
 
@@ -280,6 +288,8 @@ NEED_HELP=no
 USE_MKL="FALSE"
 CONDAMKL="FALSE"
 CUSTOMROOT="none"
+SHTnsROOT="none"
+USE_SHTns="FALSE";
 
 
 ###############################################################################################
@@ -297,6 +307,11 @@ do
 
     --with-custom=*)
       export CUSTOMROOT=`expr "x$option" : "x-*with-custom=\(.*\)"`;
+      ;;
+
+    --with-shtns=*)
+      export SHTnsROOT=`expr "x$option" : "x-*with-shtns=\(.*\)"`;
+      USE_SHTns="TRUE";
       ;;
 
     -prefix=* | --prefix=*)
@@ -460,6 +475,12 @@ then
       else
         echo "CUSTOMROOT = "$CUSTOMROOT >> make.inc
       fi
+      if [[ $SHTnsROOT == "none" ]]
+      then
+        echo "SHTnsROOT = " >> make.inc
+      else
+        echo "SHTnsROOT = "$SHTnsROOT >> make.inc
+      fi
       exit 0
 
 fi
@@ -499,6 +520,12 @@ else
   then
           OPT_FLAGS="$OPT_FLAGS -DUSE_MPI_F77_BINDINGS"
           DBG_FLAGS="$DBG_FLAGS -DUSE_MPI_F77_BINDINGS"
+  fi
+
+  if [ "$USE_SHTns" == "TRUE" ]
+  then
+          OPT_FLAGS="$OPT_FLAGS -DUSE_SHTns"
+          DBG_FLAGS="$DBG_FLAGS -DUSE_SHTns"
   fi
 
   if [ "$CUSTOMOPT" == "TRUE" ]
@@ -744,6 +771,10 @@ if [ "$CUSTOMINC" == "TRUE" ]
 then
   RAYLEIGH_INC=$RAINC
 fi
+if [ "$USE_SHTns" == "TRUE" ]
+then
+  RAYLEIGH_INC=$RAYLEIGH_INC" -I$SHTnsROOT/include"
+fi
 echo " Include flags              :  "$RAYLEIGH_INC
 echo ""
 ###############################################################################################
@@ -820,6 +851,12 @@ if [ "$CUSTOMLIB" == "TRUE" ]
 then
   LIB_FLAGS=$RALIB
   FULL_LIB=$RALIB
+fi
+
+if [ "$USE_SHTns" == "TRUE" ]
+then
+  LIB_FLAGS=$LIB_FLAGS" -L$SHTnsROOT/lib -lm -lshtns_omp"
+  FULL_LIB=$FULL_LIB" -L$SHTnsROOT/lib -lm -lshtns_omp"
 fi
 
 echo " Library flags              :  "$FULL_LIB
@@ -946,6 +983,12 @@ then
   echo "CUSTOMROOT = " >> make.inc
 else
   echo "CUSTOMROOT = "$CUSTOMROOT >> make.inc
+fi
+if [[ $SHTnsROOT == "none" ]]
+then
+  echo "SHTnsROOT = " >> make.inc
+else
+  echo "SHTnsROOT = "$SHTnsROOT >> make.inc
 fi
 
 
