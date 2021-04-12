@@ -69,6 +69,8 @@ Contains
         enddo
 
         ! build FFT normalizations so they can be accounted for later
+        !     if using Rayleigh: defined in Legendre_Polynomials.F90 (search PTS or STP)
+        !     if using SHTns: defined in Legendre_Transforms.F90 (search PTS or STP)
         allocate(to_phys_norm(0:l_max), to_spec_norm(0:l_max))
         to_phys_norm(0) = 1.0d0  ! m=0
         to_phys_norm(1:) = 0.5d0 ! m/=0
@@ -91,10 +93,6 @@ Contains
         enddo
 
         ! compute error
-        !
-        !***** this test assumes the PTS and STP normalizations have been reset to 1.0
-        !          if using SHTns: those are in Legendre_Transforms.F90
-        !          if using Rayleigh: find them in Legendre_Polynomials.F90
         diff = -1.0d0
         mxdiff = -1.0d0
         do mp=my_mp%min, my_mp%max
