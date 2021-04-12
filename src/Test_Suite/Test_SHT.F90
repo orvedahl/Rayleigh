@@ -33,8 +33,103 @@ Module Test_SHT
 Contains
 
     Subroutine Test_Spherical_Transforms()
-        Call Amp_Test_Parallel()
+        !Call Amp_Test_Parallel()
+        Call test_LT()
     End Subroutine Test_Spherical_Transforms
+
+    Subroutine Test_LT()
+        Integer :: colrank, rowrank, nf=3, lval, mval
+        Integer :: mp, l, m, r, i, f
+        Integer :: fcount(3,2)
+        Real*8 :: mxdiff, diff, diff1, diff2, ans, norm
+        Real*8, allocatable :: to_phys_norm(:), to_spec_norm(:)
+        type(SphericalBuffer) :: mytest
+
+        fcount(:,:) = nf
+
+        ! allocate fields in spectral space
+        Call mytest%init(field_count = fcount, config = 's2a')
+        Call mytest%construct('s2a')
+
+        ! initialize specific (l,m) values
+        lval = 2; mval = 1
+        do mp=my_mp%min, my_mp%max
+            m = m_values(mp)
+            do l=m,l_max
+                mytest%s2a(mp)%data(l,:,:,:) = 0.0d0
+                if ((l .eq. lval) .and. (m .eq. mval)) then
+                    do r=my_r%min,my_r%max
+                        do f=1,nf
+                            mytest%s2a(mp)%data(l,r,1,f) = (2.0d0*f+1.0d0)*radius(r)
+                            mytest%s2a(mp)%data(l,r,2,f) = -(3.0d0*f*f+2.0d0)*radius(r)**2
+                        enddo
+                    enddo
+                endif
+            enddo
+        enddo
+
+        ! build FFT normalizations so they can be accounted for later
+        allocate(to_phys_norm(0:l_max), to_spec_norm(0:l_max))
+        to_phys_norm(0) = 1.0d0  ! m=0
+        to_phys_norm(1:) = 0.5d0 ! m/=0
+        to_spec_norm(0) = 1.0d0/(n_phi)    ! m=0
+        to_spec_norm(1:) = 1.0d0/(n_theta) ! m/=0
+
+        ! build physical space
+        Call mytest%construct('p2a')
+
+        ! run tests
+        do i=1, ntest_legendre
+            Call Legendre_Transform(mytest%s2a,mytest%p2a) ! to physical
+
+            Call Legendre_Transform(mytest%p2a,mytest%s2a) ! back to spectral
+
+            ! zero out l_max modes (this is done in production runs too)
+            do mp=my_mp%min,my_mp%max
+                mytest%s2a(mp)%data(l_max,:,:,:) = 0.0d0
+            enddo
+        enddo
+
+        ! compute error
+        !
+        !***** this test assumes the PTS and STP normalizations have been reset to 1.0
+        !          if using SHTns: those are in Legendre_Transforms.F90
+        !          if using Rayleigh: find them in Legendre_Polynomials.F90
+        diff = -1.0d0
+        mxdiff = -1.0d0
+        do mp=my_mp%min, my_mp%max
+            m = m_values(mp)
+            norm = (to_phys_norm(m)*to_spec_norm(m))**ntest_legendre ! undo FFT normalization
+            do l=m,l_max
+                if ((l .eq. lval) .and. (m .eq. mval)) then
+                    do r=my_r%min,my_r%max
+                        do f=1,nf
+                           ans = (2.0d0*f + 1.0d0)*radius(r)*norm
+                           diff1 = abs(ans - mytest%s2a(mp)%data(l,r,1,f))
+
+                           ans = -(3.0d0*f*f + 2.0d0)*radius(r)**2*norm
+                           diff2 = abs(ans - mytest%s2a(mp)%data(l,r,2,f))
+
+                           diff = max(diff1, diff2)
+                        enddo
+                    enddo
+                else
+                    diff = maxval(abs(mytest%s2a(mp)%data(l,:,:,:)))
+                endif
+                if (diff .gt. mxdiff) mxdiff = diff
+            enddo
+        enddo
+        rowrank = pfi%rcomm%rank
+        colrank = pfi%ccomm%rank
+        write(*,*) 'rowrank=',rowrank,'colrank=',colrank,'max error=',mxdiff
+
+        ! cleanup
+        Call mytest%deconstruct('p2a')
+        Call mytest%deconstruct('s2a')
+
+        deallocate(to_phys_norm, to_spec_norm)
+
+    End Subroutine Test_LT
 
     Subroutine Amp_Test()
         Implicit None

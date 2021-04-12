@@ -81,7 +81,8 @@ Contains
         Call Init_ProblemSize()
 
 #ifdef USE_SHTns
-        Call SHTns_Initialize(SHTns_on_the_fly, SHTns_information, SHTns_polar_threshold, &
+        Call SHTns_Initialize(pfi%nthreads, &
+                              SHTns_on_the_fly, SHTns_information, SHTns_polar_threshold, &
                               SHTns_theta_contiguous)
 #endif
 

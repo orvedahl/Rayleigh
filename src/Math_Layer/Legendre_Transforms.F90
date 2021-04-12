@@ -352,8 +352,9 @@ End Subroutine Test_simple_dgemm2
 
 
 #ifdef USE_SHTns
-   Subroutine SHTns_Initialize(on_the_fly, information, polar_threshold, theta_contiguous)
-       Integer, intent(in) :: information
+   Subroutine SHTns_Initialize(n_threads, &
+                               on_the_fly, information, polar_threshold, theta_contiguous)
+       Integer, intent(in) :: information, n_threads
        Logical, intent(in) :: on_the_fly, theta_contiguous
        Real*8, intent(in) :: polar_threshold
 
