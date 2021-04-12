@@ -62,6 +62,11 @@ Program Main!
         Call Initialize_Controls()
         Call Set_Math_Constants()
         Call Init_ProblemSize()
+#ifdef USE_SHTns
+        Call SHTns_Initialize(pfi%nthreads, &
+                              SHTns_on_the_fly, SHTns_information, SHTns_polar_threshold, &
+                              SHTns_theta_contiguous)
+#endif
         Call Test_Lib()
     Else
         Call Main_Initialization()
