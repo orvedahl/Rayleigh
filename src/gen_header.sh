@@ -66,6 +66,12 @@ val=$CUSTOMROOT
 var="$pref$val"
 ./src/format_var.sh "$var" $HFILE
 
+#SHTns directory specified (if any)
+pref="    Character(len=512) :: build_SHTns_dir = \"---SHTns dir---"
+val=$SHTnsROOT
+var="$pref$val"
+./src/format_var.sh "$var" $HFILE
+
 #Build version
 pref="    Character(len=64 ) :: build_version = \"---build version---"
 val=$2

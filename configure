@@ -767,13 +767,13 @@ then
 else
     RAYLEIGH_INC=-I$FFTWROOT/include
 fi
-if [ "$CUSTOMINC" == "TRUE" ]
-then
-  RAYLEIGH_INC=$RAINC
-fi
 if [ "$USE_SHTns" == "TRUE" ]
 then
   RAYLEIGH_INC=$RAYLEIGH_INC" -I$SHTnsROOT/include"
+fi
+if [ "$CUSTOMINC" == "TRUE" ] # this is last for full overwrite of include flags
+then
+  RAYLEIGH_INC=$RAINC
 fi
 echo " Include flags              :  "$RAYLEIGH_INC
 echo ""
@@ -793,16 +793,16 @@ then
             then
                 MKL_LIB="-L${RAMKLROOT}/lib -Wl,-rpath,${MKLROOT}/lib -lmkl_intel_lp64 -lmkl_sequential -lmkl_core -lpthread -lm -ldl"
                 LIB_FLAGS="\$(MKL_LIB) -lstdc++"
-                FULL_LIB="-L${RAMKLROOT}/lib -Wl,-rpath,${MKLROOT}/lib -lmkl_intel_lp64 -lmkl_sequential -lmkl_core -lpthread -lm -ldl -lstdc++"
+                #FULL_LIB="-L${RAMKLROOT}/lib -Wl,-rpath,${MKLROOT}/lib -lmkl_intel_lp64 -lmkl_sequential -lmkl_core -lpthread -lm -ldl -lstdc++"
             else
                 MKL_LIB="-L${RAMKLROOT}/lib -Wl,--no-as-needed -lmkl_gf_lp64 -lmkl_sequential -lmkl_core -lpthread -lm -ldl"
                 LIB_FLAGS="\$(MKL_LIB) -lstdc++"
-                FULL_LIB="-L${RAMKLROOT}/lib -Wl,--no-as-needed -lmkl_gf_lp64 -lmkl_sequential -lmkl_core -lpthread -lm -ldl -lstdc++"
+                #FULL_LIB="-L${RAMKLROOT}/lib -Wl,--no-as-needed -lmkl_gf_lp64 -lmkl_sequential -lmkl_core -lpthread -lm -ldl -lstdc++"
             fi
         else
             MKL_LIB="-L${RAMKLROOT}/lib/intel64 -Wl,--no-as-needed -lmkl_gf_lp64 -lmkl_sequential -lmkl_core -lpthread -lm -ldl"
             LIB_FLAGS="\$(MKL_LIB) -lstdc++"
-            FULL_LIB="-L${RAMKLROOT}/lib/intel64 -Wl,--no-as-needed -lmkl_gf_lp64 -lmkl_sequential -lmkl_core -lpthread -lm -ldl -lstdc++"
+            #FULL_LIB="-L${RAMKLROOT}/lib/intel64 -Wl,--no-as-needed -lmkl_gf_lp64 -lmkl_sequential -lmkl_core -lpthread -lm -ldl -lstdc++"
         fi
     fi
 else
@@ -844,22 +844,22 @@ else
     fi
 
     LIB_FLAGS="\$(LAPACKLINK) \$(FFTWLINK) \$(BLASLINK) -lstdc++"
-    FULL_LIB="$LAPACKLINK $FFTWLINK $BLASLINK -lstdc++"
-fi
-
-if [ "$CUSTOMLIB" == "TRUE" ]
-then
-  LIB_FLAGS=$RALIB
-  FULL_LIB=$RALIB
+    #FULL_LIB="$LAPACKLINK $FFTWLINK $BLASLINK -lstdc++"
 fi
 
 if [ "$USE_SHTns" == "TRUE" ]
 then
   LIB_FLAGS=$LIB_FLAGS" -L$SHTnsROOT/lib -lm -lshtns_omp"
-  FULL_LIB=$FULL_LIB" -L$SHTnsROOT/lib -lm -lshtns_omp"
+  #FULL_LIB=$FULL_LIB" -L$SHTnsROOT/lib -lm -lshtns_omp"
 fi
 
-echo " Library flags              :  "$FULL_LIB
+if [ "$CUSTOMLIB" == "TRUE" ] # this is last for full overwrite of library flags
+then
+  LIB_FLAGS=$RALIB
+  #FULL_LIB=$RALIB
+fi
+
+echo " Library flags              :  "$LIB_FLAGS
 echo ""
 ###############################################################################################
 # Create a machine file
@@ -947,7 +947,7 @@ mkdir -p src/build/compiled
 COUNTER=0
 while [ $COUNTER -lt $nvers ]; do
 	HFILE=src/build/Run_Param_Header.${RVALUES[$COUNTER]}.F
-	./src/gen_header.sh $HFILE "${RVALUES[$COUNTER]}" "${FFLAGS[$COUNTER]}" "$FULL_LIB"
+	./src/gen_header.sh $HFILE "${RVALUES[$COUNTER]}" "${FFLAGS[$COUNTER]}" "$LIB_FLAGS"
 	let COUNTER=COUNTER+1
 done
 

@@ -6,24 +6,20 @@ INTERP=post_processing/interpolation
 # LC_COLLATE is set because sort is locale dependent otherwise.
 export LC_COLLATE=C
 
-# make the CUSTOMROOT variable available to sub-make processes
+# make some variables available to sub-make processes
 export CUSTOMROOT
+export SHTnsROOT
 
-# run using "make debug=t" to build only the debug version and install it
-ifdef debug
+# running "make autoinstall=t" is equivalent to "make; make install"
+autoinstall=
+
+# running "make target=dbg" will only compile the specified target
+target=all
+
+ifndef autoinstall
 rayleigh: prepare_directory
 	@$(MAKE) --no-print-directory --directory=$(BUILD) clean_exec
-	@$(MAKE) --no-print-directory --directory=$(BUILD) dbg
-	@echo ""
-	@echo "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
-	@echo "Compilation is complete."
-	@echo " "
-	@$(MAKE) --no-print-directory install
-	@echo ""
-else
-rayleigh: prepare_directory
-	@$(MAKE) --no-print-directory --directory=$(BUILD) clean_exec
-	@$(MAKE) --no-print-directory --directory=$(BUILD) all
+	@$(MAKE) --no-print-directory --directory=$(BUILD) $(target)
 	@echo ""
 	@echo "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
 	@echo "Compilation is complete."
@@ -31,6 +27,16 @@ rayleigh: prepare_directory
 	@echo " "
 	@echo "Run 'make install' to install the rayleigh executables into: "
 	@echo $(PREFIX)"/bin"
+	@echo ""
+else
+rayleigh: prepare_directory
+	@$(MAKE) --no-print-directory --directory=$(BUILD) clean_exec
+	@$(MAKE) --no-print-directory --directory=$(BUILD) $(target)
+	@echo ""
+	@echo "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
+	@echo "Compilation is complete."
+	@echo " "
+	@$(MAKE) --no-print-directory install
 	@echo ""
 endif
 fdeps: prepare_directory
