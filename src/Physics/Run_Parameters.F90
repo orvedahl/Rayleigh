@@ -124,8 +124,8 @@ Contains
                                  Trim(build_dir(16:Len_trim(build_dir)-ntrim))
                     Write(io,1001) "Custom Directory = ", &
                                  Trim(build_custom_dir(17:Len_trim(build_custom_dir)-ntrim))
-                    Write(io,1001) "SHTns Directory = ", &
-                                 Trim(build_SHTns_dir(17:Len_trim(build_SHTns_dir)-ntrim))
+                    Write(io,1001) "SHTns Directory  = ", &
+                                 Trim(build_SHTns_dir(16:Len_trim(build_SHTns_dir)-ntrim))
                     Write(io,*)
                     Write(io,1001) "Build Version = ", &
                                  Trim(build_version(20:Len_trim(build_version)-ntrim))
