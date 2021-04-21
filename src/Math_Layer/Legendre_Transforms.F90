@@ -352,9 +352,9 @@ End Subroutine Test_simple_dgemm2
 
 
 #ifdef USE_SHTns
-   Subroutine SHTns_Initialize(n_threads, &
+   Subroutine SHTns_Initialize(n_threads, rank, &
                                on_the_fly, information, polar_threshold, theta_contiguous)
-       Integer, intent(in) :: information, n_threads
+       Integer, intent(in) :: information, n_threads, rank
        Logical, intent(in) :: on_the_fly, theta_contiguous
        Real*8, intent(in) :: polar_threshold
 
@@ -383,7 +383,11 @@ End Subroutine Test_simple_dgemm2
        ! Rayleigh uses the very sane choice of orthonormal Y_l^m
        norm = SHT_orthonormal
 
-       Call SHTns_verbose(information) ! set how much information SHTns will display
+       if (rank .eq. 0) then
+           Call SHTns_verbose(information) ! set how much information SHTns will display
+       else
+           Call SHTns_verbose(0) ! turn off output for all other cores
+       endif
 
        SHTns_nthreads = SHTns_use_threads(n_threads) ! set OpenMP threads
 
@@ -392,6 +396,10 @@ End Subroutine Test_simple_dgemm2
 
        ! attach a grid to the SHT object & determine optimal algorithm
        Call SHTns_set_grid(SHTns_c, layout, polar_threshold, n_theta, n_phi)
+
+       if (rank .eq. 0) then
+           Call SHTns_verbose(0) ! disable output for this core, not needed anymore
+       endif
 
        ! map the C SHTns structure to the Fortran one
        Call C_F_pointer(cptr=SHTns_C, fptr=SHTns)

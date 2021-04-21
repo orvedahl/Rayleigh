@@ -306,7 +306,7 @@ Contains
             Write(tmstr,fmtstr)captured_time
             Call stdout%print('captured time: '//tmstr)
 
-            Write(tmstr,fmtstr)(last_iteration-first_iteration)/StopWatch(loop_time)%elapsed
+            Write(tmstr,fmtstr)(last_iteration-first_iteration+1)/StopWatch(loop_time)%elapsed
             Call stdout%print('   ')
             Call stdout%print('     iter/sec: '//tmstr)
 
