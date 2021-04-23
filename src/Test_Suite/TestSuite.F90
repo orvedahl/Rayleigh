@@ -26,7 +26,7 @@ Module TestSuite
     Logical :: test_mode = .false.
     Logical :: test_legendre = .false.
     Logical :: test_chebyshev = .false.
-    Namelist /Test_Namelist/ test_mode,ntest_legendre, test_legendre, test_chebyshev
+    Namelist /Test_Namelist/ test_mode,ntest_legendre, test_legendre, test_chebyshev, verify_legendre
 Contains
     Subroutine Test_Lib()
         If (my_rank .eq. 0) Then

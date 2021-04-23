@@ -25,17 +25,154 @@ Module Test_SHT
     Use ProblemSize
     Use Fields
     Use Parallel_Framework
+    Use General_MPI
     Use Fourier_Transform
     Use Legendre_Transforms, Only : Legendre_Transform
     Use SendReceive
     Implicit None
-    Integer :: ntest_legendre =1
+    Integer :: ntest_legendre = 1
+    Logical :: verify_legendre = .false.
 Contains
 
     Subroutine Test_Spherical_Transforms()
         !Call Amp_Test_Parallel()
-        Call test_LT()
+        if (verify_legendre) then
+            Call verify_LT()
+        else
+            Call test_LT()
+        endif
     End Subroutine Test_Spherical_Transforms
+
+    Subroutine Verify_LT()
+        Integer :: colrank, rowrank, nf=3, lval, mval
+        Integer :: mp, l, m, r, i, f, imi, ind, my_Nr
+        Integer :: fcount(3,2)
+        Real*8 :: mxdiff_spec_to_phys, mxdiff_spec_to_spec, diff, diff1, diff2, ans, norm, amp
+        Real*8, allocatable :: to_phys_norm(:), to_spec_norm(:), true_soln(:)
+        type(SphericalBuffer) :: mytest
+
+        fcount(:,:) = nf
+
+        ! build FFT normalizations so they can be accounted for later
+        !     if using Rayleigh: defined in Legendre_Polynomials.F90 (search PTS or STP)
+        !     if using SHTns: defined in Legendre_Transforms.F90 (search PTS or STP)
+        allocate(to_phys_norm(0:l_max), to_spec_norm(0:l_max), true_soln(1:n_theta))
+        to_phys_norm(0) = 1.0d0  ! m=0
+        to_phys_norm(1:) = 0.5d0 ! m/=0
+        to_spec_norm(0) = 1.0d0/(n_phi)    ! m=0
+        to_spec_norm(1:) = 1.0d0/(n_theta) ! m/=0
+
+        ! allocate fields in spectral space
+        Call mytest%init(field_count = fcount, config = 's2a')
+        Call mytest%construct('s2a')
+
+        ! initialize specific (l,m) values
+        lval = 2; mval = 1
+        do mp=my_mp%min, my_mp%max
+            m = m_values(mp)
+            norm = 1.0d0/to_phys_norm(m)
+            do l=m,l_max
+                mytest%s2a(mp)%data(l,:,:,:) = 0.0d0
+                if ((l .eq. lval) .and. (m .eq. mval)) then
+                    do r=my_r%min,my_r%max
+                        do f=1,nf
+                            mytest%s2a(mp)%data(l,r,1,f) = (2.0d0*f+1.0d0)*radius(r)*norm
+                            mytest%s2a(mp)%data(l,r,2,f) = -(3.0d0*f*f+2.0d0)*radius(r)**2*norm
+                        enddo
+                    enddo
+                endif
+            enddo
+        enddo
+
+        ! build true solution for (l,m) = (2,1)
+        true_soln(:) = sqrt(5.0d0/(4.0d0*pi*6.0d0))*(-3.0d0*costheta(:)*sintheta(:))
+
+        ! build physical space
+        Call mytest%construct('p2a')
+
+        Call Legendre_Transform(mytest%s2a,mytest%p2a) ! to physical
+
+        Call Legendre_Transform(mytest%p2a,mytest%s2a) ! back to spectral
+
+        ! zero out l_max modes (this is done in production runs too), also undo FFT norm
+        do mp=my_mp%min,my_mp%max
+            m = m_values(mp)
+            norm = 1.0d0/to_spec_norm(m)
+            mytest%s2a(mp)%data(l_max,:,:,:) = 0.0d0
+            mytest%s2a(mp)%data(:,:,:,:) = norm*mytest%s2a(mp)%data(:,:,:,:)
+        enddo
+
+        ! compute Spec->Phys error
+        my_Nr = my_r%max - my_r%min + 1
+        mxdiff_spec_to_phys = -1.0d0
+        do mp=my_mp%min, my_mp%max
+            m = m_values(mp)
+            if (m .eq. mval) then
+                diff = -1.0d0
+                do r=my_r%min,my_r%max
+                    do f=1,nf
+                        ! index = (r-rlo+1) + (imi-1)*Nr + (f-1)*Nr*2
+                        ind = (r-my_r%min+1) + (f-1)*my_Nr*2 ! real part for this r/field
+                        amp = (2.0d0*f+1.0d0)*radius(r)
+                        diff1 = maxval(abs(amp*true_soln(:) - mytest%p2a(:,ind,mp)))
+
+                        ind = (r-my_r%min+1) + my_Nr + (f-1)*my_Nr*2 ! imag part for this r/field
+                        amp = -(3.0d0*f*f+2.0d0)*radius(r)**2
+                        diff2 = maxval(abs(amp*true_soln(:) - mytest%p2a(:,ind,mp)))
+
+                        diff = max(diff1, diff2, diff)
+                    enddo
+                enddo
+            else
+                diff = maxval(abs(mytest%p2a(:,:,mp))) ! max over th/r/real/imag/field at this m
+            endif
+            if (diff .gt. mxdiff_spec_to_phys) mxdiff_spec_to_phys = diff
+        enddo
+
+        ! compute Spec->Phys->Spec error
+        diff = -1.0d0
+        mxdiff_spec_to_spec = -1.0d0
+        do mp=my_mp%min, my_mp%max
+            m = m_values(mp)
+            do l=m,l_max
+                if ((l .eq. lval) .and. (m .eq. mval)) then
+                    do r=my_r%min,my_r%max
+                        do f=1,nf
+                           ans = (2.0d0*f + 1.0d0)*radius(r)
+                           diff1 = abs(ans - mytest%s2a(mp)%data(l,r,1,f))
+
+                           ans = -(3.0d0*f*f + 2.0d0)*radius(r)**2
+                           diff2 = abs(ans - mytest%s2a(mp)%data(l,r,2,f))
+
+                           diff = max(diff1, diff2)
+                        enddo
+                    enddo
+                else
+                    diff = maxval(abs(mytest%s2a(mp)%data(l,:,:,:)))
+                endif
+                if (diff .gt. mxdiff_spec_to_spec) mxdiff_spec_to_spec = diff
+            enddo
+        enddo
+
+        ! send max data to root
+        rowrank = pfi%rcomm%rank
+        colrank = pfi%ccomm%rank
+        Call Global_Max(mxdiff_spec_to_phys, mxdiff_spec_to_phys)
+        Call Global_Max(mxdiff_spec_to_spec, mxdiff_spec_to_spec)
+        if (rowrank .eq. 0 .and. (colrank .eq. 0)) then
+            write(*,*)
+            write(*,*) 'Max Spec->Phys err=',mxdiff_spec_to_phys
+            write(*,*) 'Max Spec->Phys->Spec err=',mxdiff_spec_to_spec
+            write(*,*)
+        endif
+
+        ! cleanup
+        Call mytest%deconstruct('p2a')
+        Call mytest%deconstruct('s2a')
+
+        deallocate(to_phys_norm, to_spec_norm)
+
+    End Subroutine Verify_LT
 
     Subroutine Test_LT()
         Integer :: colrank, rowrank, nf=3, lval, mval
