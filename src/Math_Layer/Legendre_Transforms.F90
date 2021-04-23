@@ -496,7 +496,7 @@ End Subroutine Test_simple_dgemm2
    End Subroutine SHTns_ToSpectral
 
    Subroutine SHTns_ToPhysical(data_in, data_out)
-       Type(rmcontainer4D), Intent(In) :: data_in(1:)
+       Type(rmcontainer4D), Intent(In) :: data_in(:)
        Real*8, Intent(InOut) :: data_out(:,:,:)
        ! ingoing data has shape:
        !   data_out(lm)%data(l,r,imi,nf)
