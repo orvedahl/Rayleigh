@@ -159,7 +159,7 @@ Contains
         colrank = pfi%ccomm%rank
         Call Global_Max(mxdiff_spec_to_phys, mxdiff_spec_to_phys)
         Call Global_Max(mxdiff_spec_to_spec, mxdiff_spec_to_spec)
-        if (rowrank .eq. 0 .and. (colrank .eq. 0)) then
+        if ((rowrank .eq. 0) .and. (colrank .eq. 0)) then
             write(*,*)
             write(*,*) 'Max Spec->Phys err=',mxdiff_spec_to_phys
             write(*,*) 'Max Spec->Phys->Spec err=',mxdiff_spec_to_spec
@@ -184,6 +184,15 @@ Contains
 
         fcount(:,:) = nf
 
+        ! build FFT normalizations so they can be accounted for later
+        !     if using Rayleigh: defined in Legendre_Polynomials.F90 (search PTS or STP)
+        !     if using SHTns: defined in Legendre_Transforms.F90 (search PTS or STP)
+        allocate(to_phys_norm(0:l_max), to_spec_norm(0:l_max))
+        to_phys_norm(0) = 1.0d0  ! m=0
+        to_phys_norm(1:) = 0.5d0 ! m/=0
+        to_spec_norm(0) = 1.0d0/(n_phi)    ! m=0
+        to_spec_norm(1:) = 1.0d0/(n_theta) ! m/=0
+
         ! allocate fields in spectral space
         Call mytest%init(field_count = fcount, config = 's2a')
         Call mytest%construct('s2a')
@@ -205,27 +214,28 @@ Contains
             enddo
         enddo
 
-        ! build FFT normalizations so they can be accounted for later
-        !     if using Rayleigh: defined in Legendre_Polynomials.F90 (search PTS or STP)
-        !     if using SHTns: defined in Legendre_Transforms.F90 (search PTS or STP)
-        allocate(to_phys_norm(0:l_max), to_spec_norm(0:l_max))
-        to_phys_norm(0) = 1.0d0  ! m=0
-        to_phys_norm(1:) = 0.5d0 ! m/=0
-        to_spec_norm(0) = 1.0d0/(n_phi)    ! m=0
-        to_spec_norm(1:) = 1.0d0/(n_theta) ! m/=0
-
         ! build physical space
         Call mytest%construct('p2a')
 
         ! run tests
         do i=1, ntest_legendre
+
+            do mp=my_mp%min, my_mp%max ! undo FFT norm
+               m = m_values(mp)
+               norm = 1.0d0/to_phys_norm(m)
+               mytest%s2a(mp)%data(:,:,:,:) = norm*mytest%s2a(mp)%data(:,:,:,:)
+            enddo
+
             Call Legendre_Transform(mytest%s2a,mytest%p2a) ! to physical
 
             Call Legendre_Transform(mytest%p2a,mytest%s2a) ! back to spectral
 
-            ! zero out l_max modes (this is done in production runs too)
+            ! zero out l_max modes (this is done in production runs too), also undo FFT norm
             do mp=my_mp%min,my_mp%max
+                m = m_values(mp)
+                norm = 1.0d0/to_spec_norm(m)
                 mytest%s2a(mp)%data(l_max,:,:,:) = 0.0d0
+                mytest%s2a(mp)%data(:,:,:,:) = norm*mytest%s2a(mp)%data(:,:,:,:)
             enddo
         enddo
 
@@ -234,15 +244,14 @@ Contains
         mxdiff = -1.0d0
         do mp=my_mp%min, my_mp%max
             m = m_values(mp)
-            norm = (to_phys_norm(m)*to_spec_norm(m))**ntest_legendre ! undo FFT normalization
             do l=m,l_max
                 if ((l .eq. lval) .and. (m .eq. mval)) then
                     do r=my_r%min,my_r%max
                         do f=1,nf
-                           ans = (2.0d0*f + 1.0d0)*radius(r)*norm
+                           ans = (2.0d0*f + 1.0d0)*radius(r)
                            diff1 = abs(ans - mytest%s2a(mp)%data(l,r,1,f))
 
-                           ans = -(3.0d0*f*f + 2.0d0)*radius(r)**2*norm
+                           ans = -(3.0d0*f*f + 2.0d0)*radius(r)**2
                            diff2 = abs(ans - mytest%s2a(mp)%data(l,r,2,f))
 
                            diff = max(diff1, diff2)
@@ -256,7 +265,14 @@ Contains
         enddo
         rowrank = pfi%rcomm%rank
         colrank = pfi%ccomm%rank
-        write(*,*) 'rowrank=',rowrank,'colrank=',colrank,'max error=',mxdiff
+        Call Global_Max(mxdiff, mxdiff)
+        if ((rowrank .eq. 0) .and. (colrank .eq. 0)) then
+            write(*,*)
+            write(*,*) 'Single test is Spec->Phys and Phys->Spec'
+            write(*,*) 'Completed tests=',ntest_legendre
+            write(*,*) 'Max error=',mxdiff
+            write(*,*)
+        endif
 
         ! cleanup
         Call mytest%deconstruct('p2a')
