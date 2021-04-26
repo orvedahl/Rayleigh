@@ -354,6 +354,7 @@ End Subroutine Test_simple_dgemm2
 #ifdef USE_SHTns
    Subroutine SHTns_Initialize(n_threads, rank, &
                                on_the_fly, information, polar_threshold, theta_contiguous)
+       Implicit None
        Integer, intent(in) :: information, n_threads, rank
        Logical, intent(in) :: on_the_fly, theta_contiguous
        Real*8, intent(in) :: polar_threshold
@@ -417,12 +418,14 @@ End Subroutine Test_simple_dgemm2
    End Subroutine SHTns_Initialize
 
    Subroutine SHTns_Finalize()
+       Implicit None
        Call SHTns_unset_grid(SHTns_c)
        Call SHTns_destroy(SHTns_c)
        DeAllocate(PTS_normalization, STP_normalization)
    End Subroutine SHTns_Finalize
 
    Subroutine SHTns_ToSpectral(data_in, data_out)
+       Implicit None
        Real*8, Intent(In) :: data_in(:,:,:)
        Type(rmcontainer4d), Intent(InOut) :: data_out(1:)
        ! ingoing data has shape:
@@ -496,6 +499,7 @@ End Subroutine Test_simple_dgemm2
    End Subroutine SHTns_ToSpectral
 
    Subroutine SHTns_ToPhysical(data_in, data_out)
+       Implicit None
        Type(rmcontainer4D), Intent(In) :: data_in(:)
        Real*8, Intent(InOut) :: data_out(:,:,:)
        ! ingoing data has shape:
