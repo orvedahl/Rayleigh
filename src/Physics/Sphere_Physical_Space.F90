@@ -152,12 +152,15 @@ Contains
         Implicit None
         Integer :: t, r,k
 
+        ! Ryan-omp:
+        !$OMP PARALLEL DO PRIVATE(k,r,t)
         DO_IDX
             wsp%p3a(IDX,dvtdt) = -wsp%p3a(IDX,vr)*(radius(r)*ref%dlnrho(r)+2.0d0) &
                                         - radius(r)*wsp%p3a(IDX,dvrdr) &
                                         - wsp%p3a(IDX,vtheta)*cottheta(t) &
                                         - wsp%p3a(IDX,dvpdp)*csctheta(t)
         END_DO
+        !$OMP END PARALLEL DO
 
     End Subroutine Compute_dvtheta_by_dtheta
 
@@ -495,7 +498,7 @@ Contains
         DO_IDX
             RHSP(IDX,pvar) = RHSP(IDX,pvar)*ref%density(r)
         END_DO
-        !OMP END PARALLEL DO
+        !$OMP END PARALLEL DO
 
         If (magnetism .and. lorentz_forces) Then
             ! Add -[JxB]_theta
@@ -562,7 +565,7 @@ Contains
         DO_IDX
             RHSP(IDX,zvar) = RHSP(IDX,zvar)*ref%density(r)
         END_DO
-        !OMP END PARALLEL DO
+        !$OMP END PARALLEL DO
 
         If (magnetism .and. lorentz_forces) Then
             ! Add -[JxB]_phi
@@ -583,7 +586,7 @@ Contains
         DO_IDX
             RHSP(IDX,zvar) = RHSP(IDX,zvar)*radius(r)*csctheta(t)
         END_DO
-        !OMP END PARALLEL DO
+        !$OMP END PARALLEL DO
     End Subroutine Momentum_Advection_Phi
     Subroutine Phi_Derivatives()
         Implicit None
@@ -691,10 +694,13 @@ Contains
         Integer :: t,r,k
         Call sintheta_div(dpdt)
         !convert d/dr(p/rho) to dpdr
+        ! Ryan-omp:
+        !$OMP PARALLEL DO PRIVATE(k,r,t)
         DO_IDX
             wsp%p3a(IDX,dpdr) = wsp%p3a(IDX,dpdr)*ref%density(r)+ &
                                 & wsp%p3a(IDX,pvar)*ref%dlnrho(r)
         END_DO
+        !$OMP END PARALLEL DO
 
         If (magnetism) Then
 
@@ -718,12 +724,15 @@ Contains
         Implicit None
         Integer :: t, r,k
 
+        ! Ryan-omp:
+        !$OMP PARALLEL DO PRIVATE(k,r,t)
         DO_IDX
             wsp%p3a(IDX,dbtdt) = - wsp%p3a(IDX,br)*2.0d0 &
                                  - radius(r)*wsp%p3a(IDX,dbrdr) &
                                  - wsp%p3a(IDX,btheta)*cottheta(t) &
                                  - wsp%p3a(IDX,dbpdp)*csctheta(t)
         END_DO
+        !$OMP END PARALLEL DO
 
     End Subroutine Compute_dbtheta_by_dtheta
 

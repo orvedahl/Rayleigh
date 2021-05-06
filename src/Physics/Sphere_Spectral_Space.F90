@@ -234,11 +234,14 @@ Contains
         If (output_iteration) Then
             !Convert p/rho to p
             ! We already took d/dr(p/rho), so we'll fix that later
+            ! Ryan-omp:
+            !$OMP PARALLEL DO PRIVATE(m,i)
             Do m = 1, my_num_lm
                 Do i = 1, 2
                     wsp%p1a(:,i,m,pvar) = wsp%p1a(:,i,m,pvar)*ref%density(:)
                 Enddo
             Enddo
+            !$OMP END PARALLEL DO
             Call cobuffer%reform()
         Endif
         Call wsp%reform()    ! move from p1a to s2a
@@ -280,11 +283,14 @@ Contains
             Call ctemp%construct('p1a')
             Call ctemp%construct('p1b')
             ctemp%p1a(:,:,:,:) = 0.0d0
+            ! Ryan-omp:
+            !$OMP PARALLEL DO PRIVATE(m,i)
             Do m = 1, my_num_lm
                 Do i = 1, 2
                     ctemp%p1a(:,i,m,1) = wsp%p1b(:,i,m,emfphi)
                 Enddo
             Enddo
+            !$OMP END PARALLEL DO
 
             Call gridcp%to_spectral(ctemp%p1a,ctemp%p1b)
             Call gridcp%d_by_dr_cp(1,2,ctemp%p1b,1)
@@ -293,11 +299,14 @@ Contains
 
 
 
+            ! Ryan-omp:
+            !$OMP PARALLEL DO PRIVATE(m,i)
             Do m = 1, my_num_lm
                 Do i = 1, 2
                     wsp%p1b(:,i,m,avar) = wsp%p1b(:,i,m,avar) + ctemp%p1a(:,i,m,2)
                 Enddo
             Enddo
+            !$OMP END PARALLEL DO
             Call ctemp%deconstruct('p1a')
             Call ctemp%deconstruct('p1b')
         Else

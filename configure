@@ -275,6 +275,11 @@ function displayhelp {
     echo "          <SHTns ROOT>/lib/libshtns_omp.a"
     echo ""
 
+    echo "  --openmp ; -openmp:"
+    echo "      Set this flag to enable OpenMP directives. Choose the number of OMP"
+    echo "      threads by setting the OMP_NUM_THREADS environment variable."
+    echo ""
+
 }
 
 
@@ -307,6 +312,10 @@ do
 
     --with-custom=*)
       export CUSTOMROOT=`expr "x$option" : "x-*with-custom=\(.*\)"`;
+      ;;
+
+    --openmp | -openmp )
+      USEOPENMP="TRUE";
       ;;
 
     --with-shtns=*)
@@ -516,16 +525,10 @@ else
   OPT_FLAGS=$(opt_flags $FVERSION)
   DBG_FLAGS=$(dbg_flags $FVERSION)
 
-  if [ "$USEMPIF77" == "TRUE" ]
+  if [ "$USEOPENMP" == "TRUE" ] # include OpenMP support for Intel/GNU
   then
-          OPT_FLAGS="$OPT_FLAGS -DUSE_MPI_F77_BINDINGS"
-          DBG_FLAGS="$DBG_FLAGS -DUSE_MPI_F77_BINDINGS"
-  fi
-
-  if [ "$USE_SHTns" == "TRUE" ]
-  then
-          OPT_FLAGS="$OPT_FLAGS -DUSE_SHTns"
-          DBG_FLAGS="$DBG_FLAGS -DUSE_SHTns"
+          OPT_FLAGS="$OPT_FLAGS -fopenmp"
+          DBG_FLAGS="$DBG_FLAGS -fopenmp"
   fi
 
   if [ "$CUSTOMOPT" == "TRUE" ]
@@ -545,6 +548,30 @@ else
     echo "  Overriding all flags..,"
     OPT_FLAGS=$RAFFLAGS
     DBG_FLAGS=$RAFFLAGS
+  fi
+
+  # appears after CUSTOM stuff because this is an internally used directive and
+  # should be set regardless of what compiler flags are used
+  if [ "$USEMPIF77" == "TRUE" ]
+  then
+          OPT_FLAGS="$OPT_FLAGS -DUSE_MPI_F77_BINDINGS"
+          DBG_FLAGS="$DBG_FLAGS -DUSE_MPI_F77_BINDINGS"
+  fi
+
+  # appears after CUSTOM stuff because this is an internally used directive and
+  # should be set regardless of what compiler flags are used
+  if [ "$USE_SHTns" == "TRUE" ]
+  then
+          OPT_FLAGS="$OPT_FLAGS -DUSE_SHTns"
+          DBG_FLAGS="$DBG_FLAGS -DUSE_SHTns"
+  fi
+
+  # appears after CUSTOM stuff because this is an internally used directive and
+  # should be set regardless of what compiler flags are used
+  if [ "$USEOPENMP" == "TRUE" ]
+  then
+          OPT_FLAGS="$OPT_FLAGS -Duseomp"
+          DBG_FLAGS="$DBG_FLAGS -Duseomp"
   fi
 
   echo ' '
@@ -793,16 +820,13 @@ then
             then
                 MKL_LIB="-L${RAMKLROOT}/lib -Wl,-rpath,${MKLROOT}/lib -lmkl_intel_lp64 -lmkl_sequential -lmkl_core -lpthread -lm -ldl"
                 LIB_FLAGS="\$(MKL_LIB) -lstdc++"
-                #FULL_LIB="-L${RAMKLROOT}/lib -Wl,-rpath,${MKLROOT}/lib -lmkl_intel_lp64 -lmkl_sequential -lmkl_core -lpthread -lm -ldl -lstdc++"
             else
                 MKL_LIB="-L${RAMKLROOT}/lib -Wl,--no-as-needed -lmkl_gf_lp64 -lmkl_sequential -lmkl_core -lpthread -lm -ldl"
                 LIB_FLAGS="\$(MKL_LIB) -lstdc++"
-                #FULL_LIB="-L${RAMKLROOT}/lib -Wl,--no-as-needed -lmkl_gf_lp64 -lmkl_sequential -lmkl_core -lpthread -lm -ldl -lstdc++"
             fi
         else
             MKL_LIB="-L${RAMKLROOT}/lib/intel64 -Wl,--no-as-needed -lmkl_gf_lp64 -lmkl_sequential -lmkl_core -lpthread -lm -ldl"
             LIB_FLAGS="\$(MKL_LIB) -lstdc++"
-            #FULL_LIB="-L${RAMKLROOT}/lib/intel64 -Wl,--no-as-needed -lmkl_gf_lp64 -lmkl_sequential -lmkl_core -lpthread -lm -ldl -lstdc++"
         fi
     fi
 else
@@ -844,19 +868,22 @@ else
     fi
 
     LIB_FLAGS="\$(LAPACKLINK) \$(FFTWLINK) \$(BLASLINK) -lstdc++"
-    #FULL_LIB="$LAPACKLINK $FFTWLINK $BLASLINK -lstdc++"
 fi
 
+# SHTns
 if [ "$USE_SHTns" == "TRUE" ]
 then
-  LIB_FLAGS=$LIB_FLAGS" -L$SHTnsROOT/lib -lm -lshtns_omp"
-  #FULL_LIB=$FULL_LIB" -L$SHTnsROOT/lib -lm -lshtns_omp"
+  if [ "$USEOPENMP" == "TRUE" ]
+  then
+     LIB_FLAGS=$LIB_FLAGS" -L$SHTnsROOT/lib -lm -lshtns_omp"
+  else
+     LIB_FLAGS=$LIB_FLAGS" -L$SHTnsROOT/lib -lm -lshtns"
+  fi
 fi
 
 if [ "$CUSTOMLIB" == "TRUE" ] # this is last for full overwrite of library flags
 then
   LIB_FLAGS=$RALIB
-  #FULL_LIB=$RALIB
 fi
 
 echo " Library flags              :  "$LIB_FLAGS
