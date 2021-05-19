@@ -744,6 +744,8 @@ Module Linear_Solve
         Integer :: itmp
         nullify(coefs)
         indx = 1
+        ! Ryan-omp:
+        !$OMP DO PRIVATE(i,jj,ii,itmp,nsub,indx,coefs) SCHEDULE(dynamic,4)
         Do i = 1, n_modes
             nsub = nsub_modes(i)-1 !like n_m locally stored for ell(i)
 
@@ -751,20 +753,21 @@ Module Linear_Solve
             ! This logic should be streamlined.  Possibly best to create a support array
             ! that indicates the maximum dorder for a particular mode....
             If (allocated(equation_set(i,eqid)%coefs(varid)%data)) then
-            itmp =UBOUND( equation_set(i,eqid)%coefs(varid)%data,2 )
-            If (dorder .le. itmp) Then
-            coefs => equation_set(i,eqid)%coefs(varid)%data(:,dorder)
-            Do jj = indx, indx+nsub
-                Do ii = 1,ndim2
-                    addto(:,ii,jj,eqid) = addto(:,ii,jj,eqid)+dfield(:,ii,jj,dind)*coefs
-                    ! if we didn't want to use the pointer (worth testing), we could just write this...
-                    !addto(:,ii,jj) = addto(:,ii,jj)+dfield(:,ii,jj)*equation_set(i,eqid)%coefs(varid)%data(:,dorder)
-                Enddo
-            Enddo
-            Endif
+                itmp =UBOUND( equation_set(i,eqid)%coefs(varid)%data,2 )
+                If (dorder .le. itmp) Then
+                    coefs => equation_set(i,eqid)%coefs(varid)%data(:,dorder)
+                    Do jj = indx, indx+nsub
+                        Do ii = 1,ndim2
+                            addto(:,ii,jj,eqid) = addto(:,ii,jj,eqid)+dfield(:,ii,jj,dind)*coefs
+                            ! if we didn't want to use the pointer (worth testing), we could just write this...
+                            !addto(:,ii,jj) = addto(:,ii,jj)+dfield(:,ii,jj)*equation_set(i,eqid)%coefs(varid)%data(:,dorder)
+                        Enddo
+                    Enddo
+                Endif
             Endif
             indx = indx+nsub_modes(i)
         Enddo
+        !$OMP END DO
         nullify(coefs)
         ! It might also be worth making a coef array like coefs(:,dorder,i,eqid), but it would be memory wasteful
         !  since no variable but W has a third derivative, and since we only need the first derivative for P

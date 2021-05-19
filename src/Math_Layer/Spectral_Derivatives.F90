@@ -27,6 +27,8 @@ Module Spectral_Derivatives
     Integer :: nm_local
     Integer, Private :: lmax, tnrl,nrl
 
+    Integer, Private :: loop_chunk_size = 2
+
     !These routines compute sin(theta)dA_by_dtheta
     Interface d_by_dtheta
         Module Procedure d_dtheta_single,d_dtheta_buffer, d_dtheta_buff2arr
@@ -98,7 +100,8 @@ Subroutine d_dtheta_single(A,B)
     Type(rmcontainer), Intent(InOut) :: A(1:),B(1:)
     Integer :: i, m, l, k
     ! Computes B = sin(theta)dA_by_d_theta
-    !$OMP PARALLEL DO PRIVATE(i,m,k,l)
+    ! Ryan-omp:
+    !$OMP DO PRIVATE(i,m,k,l) SCHEDULE(dynamic,loop_chunk_size)
     Do i = 1, nm_local
         m = mlocal(i)
         If (m .ne. lmax) Then
@@ -116,7 +119,7 @@ Subroutine d_dtheta_single(A,B)
             Enddo
         Endif
     Enddo
-    !$OMP END PARALLEL DO
+    !$OMP END DO
 End Subroutine d_dtheta_single
 
 !//////////////////////////////
@@ -126,7 +129,8 @@ Subroutine d_dtheta_single3D(A,B)
     Type(rmcontainer3D), Intent(InOut) :: A(1:),B(1:)
     Integer :: i, m, l
     ! Computes B = sin(theta)dA_by_d_theta
-    !$OMP PARALLEL DO PRIVATE(i,m,l)
+    ! Ryan-omp:
+    !$OMP DO PRIVATE(i,m,l) SCHEDULE(dynamic,loop_chunk_size)
        Do i = 1, nm_local
         m = mlocal(i)
         If (m .ne. lmax) Then
@@ -140,7 +144,7 @@ Subroutine d_dtheta_single3D(A,B)
             B(i)%data(lmax,:,:) = 0.0d0
         Endif
     Enddo
-    !$OMP END PARALLEL DO
+    !$OMP END DO
 End Subroutine d_dtheta_single3D
 
 Subroutine d_sdtheta_single(A,B)
@@ -148,7 +152,8 @@ Subroutine d_sdtheta_single(A,B)
     Type(rmcontainer), Intent(InOut) :: A(1:),B(1:)
     Integer :: i, m, l, k
     ! Computes B = 1/sin(theta)d(sin^2 A)_by_d_theta
-    !$OMP PARALLEL DO PRIVATE(i,m,k,l)
+    ! Ryan-omp:
+    !$OMP DO PRIVATE(i,m,k,l) SCHEDULE(dynamic,loop_chunk_size)
     Do i = 1, nm_local
         m = mlocal(i)
         If (m .ne. lmax) Then
@@ -166,7 +171,7 @@ Subroutine d_sdtheta_single(A,B)
             Enddo
         Endif
     Enddo
-    !$OMP END PARALLEL DO
+    !$OMP END DO
 End Subroutine d_sdtheta_single
 
 !/////// For new layout
@@ -175,7 +180,8 @@ subroutine d_sdtheta_single3D(A,B)
     Type(rmcontainer3D), Intent(InOut) :: A(1:),B(1:)
     Integer :: i, m, l
     ! Computes B = 1/sin(theta)d(sin^2 A)_by_d_theta
-    !$OMP PARALLEL DO PRIVATE(i,m,l)
+    ! Ryan-omp:
+    !$OMP DO PRIVATE(i,m,l) SCHEDULE(dynamic,loop_chunk_size)
     Do i = 1, nm_local
         m = mlocal(i)
         If (m .ne. lmax) Then
@@ -189,7 +195,7 @@ subroutine d_sdtheta_single3D(A,B)
             B(i)%data(lmax,:,:) = 0.0d0
         Endif
     Enddo
-    !$OMP END PARALLEL DO
+    !$OMP END DO
 End Subroutine d_sdtheta_single3D
 
 
@@ -200,24 +206,25 @@ Subroutine d_dtheta_buffer(A,fin,fout)
     Integer :: ind1, ind2
     ind1 = (fin-1)*tnrl
     ind2 = (fout-1)*tnrl
-    !$OMP PARALLEL DO PRIVATE(i,m,k,l)
+    ! Ryan-omp: is the inner stuff thread safe and/or race-condition-safe???
+    !$OMP DO PRIVATE(i,m,k,l) SCHEDULE(dynamic,loop_chunk_size)
     Do i = 1, nm_local
         m = mlocal(i)
         If ( m .ne. lmax) Then
-        Do k = 1,tnrl
-        Do l = m+1, lmax-1
-            A(i)%data(l,k+ind2) = A(i)%data(l-1,k+ind1)*deriv_coefs(i)%data(1,l) &
-                                  + A(i)%data(l+1,k+ind1)*deriv_coefs(i)%data(2,l)
-        Enddo
-        A(i)%data(m,k+ind2)    = A(i)%data(m+1   ,k+ind1)*deriv_coefs(i)%data(2,m)
-        A(i)%data(lmax,k+ind2) = A(i)%data(lmax-1,k+ind1)*deriv_coefs(i)%data(1,lmax)
-        Enddo
+            Do k = 1,tnrl
+                Do l = m+1, lmax-1
+                    A(i)%data(l,k+ind2) = A(i)%data(l-1,k+ind1)*deriv_coefs(i)%data(1,l) &
+                                          + A(i)%data(l+1,k+ind1)*deriv_coefs(i)%data(2,l)
+                Enddo
+                A(i)%data(m,k+ind2)    = A(i)%data(m+1   ,k+ind1)*deriv_coefs(i)%data(2,m)
+                A(i)%data(lmax,k+ind2) = A(i)%data(lmax-1,k+ind1)*deriv_coefs(i)%data(1,lmax)
+            Enddo
         Else
-        A(i)%data(m,ind2+1:ind2+tnrl) = 0.0d0
+            A(i)%data(m,ind2+1:ind2+tnrl) = 0.0d0
         Endif
 
     Enddo
-    !$OMP END PARALLEL DO
+    !$OMP END DO
 End Subroutine d_dtheta_buffer
 
 !///// For New layout
@@ -228,24 +235,25 @@ Subroutine d_dtheta_buffer4D(A,fin,fout)
     Integer :: ind1, ind2
     ind1 = (fin-1)*tnrl
     ind2 = (fout-1)*tnrl
-    !$OMP PARALLEL DO PRIVATE(i,m,l)
+    ! Ryan-omp: is the inner stuff thread safe and/or race-condition-safe???
+    !$OMP DO PRIVATE(i,m,l) SCHEDULE(dynamic,loop_chunk_size)
     Do i = 1, nm_local
         m = mlocal(i)
         If ( m .ne. lmax) Then
 
-        Do l = m+1, lmax-1
-            A(i)%data(l,:,:,fout) = A(i)%data(l-1,:,:,fin)*deriv_coefs(i)%data(1,l) &
-            + A(i)%data(l+1,:,:,fin)*deriv_coefs(i)%data(2,l)
-        Enddo
-        A(i)%data(m,:,:,fout)    = A(i)%data(m+1   ,:,:,fin)*deriv_coefs(i)%data(2,m)
-        A(i)%data(lmax,:,:,fout) = A(i)%data(lmax-1,:,:,fin)*deriv_coefs(i)%data(1,lmax)
+            Do l = m+1, lmax-1
+                A(i)%data(l,:,:,fout) = A(i)%data(l-1,:,:,fin)*deriv_coefs(i)%data(1,l) &
+                                    + A(i)%data(l+1,:,:,fin)*deriv_coefs(i)%data(2,l)
+            Enddo
+            A(i)%data(m,:,:,fout)    = A(i)%data(m+1   ,:,:,fin)*deriv_coefs(i)%data(2,m)
+            A(i)%data(lmax,:,:,fout) = A(i)%data(lmax-1,:,:,fin)*deriv_coefs(i)%data(1,lmax)
 
         Else
             A(i)%data(m,:,:,fout) = 0.0d0
         Endif
 
     Enddo
-    !$OMP END PARALLEL DO
+    !$OMP END DO
 End Subroutine d_dtheta_buffer4D
 
 Subroutine d_sdtheta_buffer(A,fin,fout)
@@ -255,23 +263,24 @@ Subroutine d_sdtheta_buffer(A,fin,fout)
     Integer :: ind1, ind2
     ind1 = (fin-1)*tnrl
     ind2 = (fout-1)*tnrl
-    !$OMP PARALLEL DO PRIVATE(i,m,k,l)
+    ! Ryan-omp: is the inner stuff thread safe and/or race-condition-safe???
+    !$OMP DO PRIVATE(i,m,k,l) SCHEDULE(dynamic,loop_chunk_size)
     Do i = 1, nm_local
         m = mlocal(i)
         If (m .ne. lmax) Then
-        Do k = 1,tnrl
-        Do l = m+1, lmax-1
-            A(i)%data(l,k+ind2) = A(i)%data(l-1,k+ind1)*sderiv_coefs(i)%data(1,l) &
-                                  + A(i)%data(l+1,k+ind1)*sderiv_coefs(i)%data(2,l)
-        Enddo
-        A(i)%data(m   ,k+ind2) = A(i)%data(m+1   ,k+ind1)*sderiv_coefs(i)%data(2,m)
-        A(i)%data(lmax,k+ind2) = A(i)%data(lmax-1,k+ind1)*sderiv_coefs(i)%data(1,lmax)
-        Enddo
+            Do k = 1,tnrl
+                Do l = m+1, lmax-1
+                    A(i)%data(l,k+ind2) = A(i)%data(l-1,k+ind1)*sderiv_coefs(i)%data(1,l) &
+                                          + A(i)%data(l+1,k+ind1)*sderiv_coefs(i)%data(2,l)
+                Enddo
+                A(i)%data(m   ,k+ind2) = A(i)%data(m+1   ,k+ind1)*sderiv_coefs(i)%data(2,m)
+                A(i)%data(lmax,k+ind2) = A(i)%data(lmax-1,k+ind1)*sderiv_coefs(i)%data(1,lmax)
+            Enddo
         Else
             A(i)%data(m,ind2+1:ind2+tnrl) = 0.0d0
         Endif
     Enddo
-    !$OMP END PARALLEL DO
+    !$OMP END DO
 End Subroutine d_sdtheta_buffer
 
 !//////////////////////
@@ -280,21 +289,22 @@ subroutine d_sdtheta_buffer4d(A,fin,fout)
     Type(rmcontainer4d), Intent(InOut) :: A(1:)
     Integer, Intent(In) :: fin, fout
     Integer :: i, m, l
-    !$OMP PARALLEL DO PRIVATE(i,m,l)
+    ! Ryan-omp: is the inner stuff thread safe and/or race-condition-safe???
+    !$OMP DO PRIVATE(i,m,l) SCHEDULE(dynamic,loop_chunk_size)
     Do i = 1, nm_local
         m = mlocal(i)
         If (m .ne. lmax) Then
-        Do l = m+1, lmax-1
-            A(i)%data(l,:,:,fout) = A(i)%data(l-1,:,:,fin)*sderiv_coefs(i)%data(1,l) &
-                                    + A(i)%data(l+1,:,:,fin)*sderiv_coefs(i)%data(2,l)
-        Enddo
-        A(i)%data(m   ,:,:,fout) = A(i)%data(m+1   ,:,:,fin)*sderiv_coefs(i)%data(2,m)
-        A(i)%data(lmax,:,:,fout) = A(i)%data(lmax-1,:,:,fin)*sderiv_coefs(i)%data(1,lmax)
+            Do l = m+1, lmax-1
+                A(i)%data(l,:,:,fout) = A(i)%data(l-1,:,:,fin)*sderiv_coefs(i)%data(1,l) &
+                                        + A(i)%data(l+1,:,:,fin)*sderiv_coefs(i)%data(2,l)
+            Enddo
+            A(i)%data(m   ,:,:,fout) = A(i)%data(m+1   ,:,:,fin)*sderiv_coefs(i)%data(2,m)
+            A(i)%data(lmax,:,:,fout) = A(i)%data(lmax-1,:,:,fin)*sderiv_coefs(i)%data(1,lmax)
         Else
             A(i)%data(m,:,:,fout) = 0.0d0
         Endif
     Enddo
-    !$OMP END PARALLEL DO
+    !$OMP END DO
 End Subroutine d_sdtheta_buffer4d
 
 
@@ -304,17 +314,18 @@ Subroutine d_dtheta_buff2arr(A,fin,arr)
     Integer :: i, m, k, l
     Integer :: ind1
     ind1 = (fin-1)*tnrl
-    !$OMP PARALLEL DO PRIVATE(i,m,k,l)
+    ! Ryan-omp:
+    !$OMP DO PRIVATE(i,m,k,l) SCHEDULE(dynamic,loop_chunk_size)
     Do i = 1, nm_local
         m = mlocal(i)
         if (m .ne. lmax) then
             Do k = 1,tnrl
-            Do l = m+1, lmax-1
-                arr(i)%data(l,k) = A(i)%data(l-1,k+ind1)*deriv_coefs(i)%data(1,l) &
-                                   + A(i)%data(l+1,k+ind1)*deriv_coefs(i)%data(2,l)
-            Enddo
-            arr(i)%data(m,k)    = A(i)%data(m+1   ,k+ind1)*deriv_coefs(i)%data(2,m)
-            arr(i)%data(lmax,k) = A(i)%data(lmax-1,k+ind1)*deriv_coefs(i)%data(1,lmax)
+                Do l = m+1, lmax-1
+                    arr(i)%data(l,k) = A(i)%data(l-1,k+ind1)*deriv_coefs(i)%data(1,l) &
+                                       + A(i)%data(l+1,k+ind1)*deriv_coefs(i)%data(2,l)
+                Enddo
+                arr(i)%data(m,k)    = A(i)%data(m+1   ,k+ind1)*deriv_coefs(i)%data(2,m)
+                arr(i)%data(lmax,k) = A(i)%data(lmax-1,k+ind1)*deriv_coefs(i)%data(1,lmax)
             Enddo
 
         else
@@ -322,7 +333,7 @@ Subroutine d_dtheta_buff2arr(A,fin,arr)
         endif
 
     Enddo
-    !$OMP END PARALLEL DO
+    !$OMP END DO
 End Subroutine d_dtheta_buff2arr
 
 !///// For New layout
@@ -331,7 +342,8 @@ Subroutine d_dtheta_4dbuff2arr(A,fin,arr)
     Type(rmcontainer3d), Intent(InOut) :: arr(1:)
     Integer, Intent(In) :: fin
     Integer :: i, m, l
-    !$OMP PARALLEL DO PRIVATE(i,m,l)
+    ! Ryan-omp:
+    !$OMP DO PRIVATE(i,m,l) SCHEDULE(dynamic,loop_chunk_size)
     Do i = 1, nm_local
         m = mlocal(i)
         if (m .ne. lmax) then
@@ -346,7 +358,7 @@ Subroutine d_dtheta_4dbuff2arr(A,fin,arr)
         endif
 
     Enddo
-    !$OMP END PARALLEL DO
+    !$OMP END DO
 End Subroutine d_dtheta_4dbuff2arr
 
 
@@ -358,22 +370,24 @@ Subroutine d_sdtheta_buff2arr(A,fin,arr)
     Integer :: i, m, k, l
     Integer :: ind1
     ind1 = (fin-1)*tnrl
-    !$OMP PARALLEL DO PRIVATE(i,m,k,l)
+    ! Ryan-omp:
+    !$OMP DO PRIVATE(i,m,k,l) SCHEDULE(dynamic,loop_chunk_size)
     Do i = 1, nm_local
         m = mlocal(i)
         if (m .ne. lmax) then
-        Do k = 1,tnrl
-        Do l = m+1, lmax-1
-            arr(i)%data(l,k) = A(i)%data(l-1,k+ind1)*sderiv_coefs(i)%data(1,l)   +   A(i)%data(l+1,k+ind1)*sderiv_coefs(i)%data(2,l)
-        Enddo
-        arr(i)%data(m,k)    = A(i)%data(m+1   ,k+ind1)*sderiv_coefs(i)%data(2,m)
-        arr(i)%data(lmax,k) = A(i)%data(lmax-1,k+ind1)*sderiv_coefs(i)%data(1,lmax)
-        Enddo
+            Do k = 1,tnrl
+                Do l = m+1, lmax-1
+                    arr(i)%data(l,k) = A(i)%data(l-1,k+ind1)*sderiv_coefs(i)%data(1,l) &
+                                      + A(i)%data(l+1,k+ind1)*sderiv_coefs(i)%data(2,l)
+                Enddo
+                arr(i)%data(m,k)    = A(i)%data(m+1   ,k+ind1)*sderiv_coefs(i)%data(2,m)
+                arr(i)%data(lmax,k) = A(i)%data(lmax-1,k+ind1)*sderiv_coefs(i)%data(1,lmax)
+            Enddo
         Else
             arr(i)%data(m,:) = 0.0d0
         Endif
     Enddo
-    !$OMP END PARALLEL DO
+    !$OMP END DO
 End Subroutine d_sdtheta_buff2arr
 
 !///////////////////////////////////
@@ -383,21 +397,22 @@ Subroutine d_sdtheta_4dbuff2arr(A,fin,arr)
     Type(rmcontainer3d), Intent(InOut) :: arr(1:)
     Integer, Intent(In) :: fin
     Integer :: i, m, l
-    !$OMP PARALLEL DO PRIVATE(i,m,l)
+    ! Ryan-omp:
+    !$OMP DO PRIVATE(i,m,l) SCHEDULE(dynamic,loop_chunk_size)
     Do i = 1, nm_local
         m = mlocal(i)
         if (m .ne. lmax) then
-        Do l = m+1, lmax-1
-            arr(i)%data(l,:,:) = A(i)%data(l-1,:,:,fin)*sderiv_coefs(i)%data(1,l) &
-                                 + A(i)%data(l+1,:,:,fin)*sderiv_coefs(i)%data(2,l)
-        Enddo
-        arr(i)%data(m,:,:)    = A(i)%data(m+1   ,:,:,fin)*sderiv_coefs(i)%data(2,m)
-        arr(i)%data(lmax,:,:) = A(i)%data(lmax-1,:,:,fin)*sderiv_coefs(i)%data(1,lmax)
+            Do l = m+1, lmax-1
+                arr(i)%data(l,:,:) = A(i)%data(l-1,:,:,fin)*sderiv_coefs(i)%data(1,l) &
+                                     + A(i)%data(l+1,:,:,fin)*sderiv_coefs(i)%data(2,l)
+            Enddo
+            arr(i)%data(m,:,:)    = A(i)%data(m+1   ,:,:,fin)*sderiv_coefs(i)%data(2,m)
+            arr(i)%data(lmax,:,:) = A(i)%data(lmax-1,:,:,fin)*sderiv_coefs(i)%data(1,lmax)
         Else
             arr(i)%data(m,:,:) = 0.0d0
         Endif
     Enddo
-    !$OMP END PARALLEL DO
+    !$OMP END DO
 End Subroutine d_sdtheta_4dbuff2arr
 !///////////////////////////
 ! Phi derivatives
@@ -416,7 +431,8 @@ End Subroutine d_sdtheta_4dbuff2arr
         ni = ashape(2)
         nj = ashape(3)
         nk = ashape(1)
-        !$OMP PARALLEL DO PRIVATE(i,j,k,m)
+        ! Ryan-omp: is the inner stuff thread safe and/or race-condition-safe???
+        !$OMP DO PRIVATE(i,j,k,m) SCHEDULE(dynamic,loop_chunk_size)
         Do j = 1, nj
             Do i = 1, ni
                 Do k = 1, nk,2
@@ -426,7 +442,7 @@ End Subroutine d_sdtheta_4dbuff2arr
                 Enddo
             Enddo
         Enddo
-        !$OMP END PARALLEL DO
+        !$OMP END DO
     End Subroutine d_by_dphi3D
 
     Subroutine d_by_dphi3Dbuff(arrin,from_ind,to_ind)
@@ -440,7 +456,8 @@ End Subroutine d_sdtheta_4dbuff2arr
         nj = ashape(3)
         nk = ashape(1)
         If (from_ind .ne. to_ind) Then
-            !$OMP PARALLEL DO PRIVATE(i,j,k,m)
+            ! Ryan-omp: is the inner stuff thread safe and/or race-condition-safe???
+            !$OMP DO PRIVATE(i,j,k,m) SCHEDULE(dynamic,loop_chunk_size)
             Do j = 1, nj
                 Do i = 1, ni
                     Do k = 1, nk,2
@@ -450,9 +467,10 @@ End Subroutine d_sdtheta_4dbuff2arr
                     Enddo
                 Enddo
             Enddo
-            !$OMP END PARALLEL DO
+            !$OMP END DO
         Else
-            !$OMP PARALLEL DO PRIVATE(i,j,k,m,tmp)
+            ! Ryan-omp: is the inner stuff thread safe and/or race-condition-safe???
+            !$OMP DO PRIVATE(i,j,k,m,tmp) SCHEDULE(dynamic,loop_chunk_size)
             Do j = 1, nj
                 Do i = 1, ni
                     Do k = 1, nk,2
@@ -463,7 +481,7 @@ End Subroutine d_sdtheta_4dbuff2arr
                     Enddo
                 Enddo
             Enddo
-            !$OMP END PARALLEL DO
+            !$OMP END DO
         Endif
     End Subroutine d_by_dphi3Dbuff
 
@@ -480,13 +498,14 @@ End Subroutine d_sdtheta_4dbuff2arr
         rrstart = (from_ind-1)*tnrl+1
         rmid = rrstart+nrl
         irend = rrstart+tnrl-1
-        !$OMP PARALLEL DO PRIVATE(i,m)
+        ! Ryan-omp:
+        !$OMP DO PRIVATE(i,m) SCHEDULE(dynamic,loop_chunk_size)
         Do i = 1, nm_local
                 m = mlocal(i)
                 arr(i)%data(:,1:nrl)      = -m*buff(i)%data(:,rmid:irend)
                 arr(i)%data(:,nrl+1:tnrl) =  m*buff(i)%data(:,rrstart:rmid-1)
         Enddo
-        !$OMP END PARALLEL DO
+        !$OMP END DO
 
     End Subroutine d_by_dphi_buff2arr
 
@@ -498,13 +517,14 @@ End Subroutine d_sdtheta_4dbuff2arr
         Type(rmcontainer3d), Intent(InOut) :: arr(1:)
         Integer, Intent(In) :: from_ind
         Integer :: i, m
-        !$OMP PARALLEL DO PRIVATE(i,m)
+        ! Ryan-omp:
+        !$OMP DO PRIVATE(i,m) SCHEDULE(dynamic,loop_chunk_size)
         Do i = 1, nm_local
                 m = mlocal(i)
                 arr(i)%data(:,:,1) = -m*buff(i)%data(:,:,2,from_ind)
                 arr(i)%data(:,:,2) =  m*buff(i)%data(:,:,1,from_ind)
         Enddo
-        !$OMP END PARALLEL DO
+        !$OMP END DO
 
     End Subroutine d_by_dphi_4dbuff2arr
 
@@ -514,13 +534,14 @@ End Subroutine d_sdtheta_4dbuff2arr
         Type(rmcontainer3d), Intent(InOut) :: arr1(1:), arr2(1:)
 
         Integer :: i, m
-        !$OMP PARALLEL DO PRIVATE(i,m)
+        ! Ryan-omp:
+        !$OMP DO PRIVATE(i,m) SCHEDULE(dynamic,loop_chunk_size)
         Do i = 1, nm_local
                 m = mlocal(i)
                 arr2(i)%data(:,:,1) = -m*arr1(i)%data(:,:,2)
                 arr2(i)%data(:,:,2) =  m*arr1(i)%data(:,:,1)
         Enddo
-        !$OMP END PARALLEL DO
+        !$OMP END DO
 
     End Subroutine d_by_dphi_arr2arr
 
@@ -544,17 +565,21 @@ End Subroutine d_sdtheta_4dbuff2arr
             rrstart2 = (to_ind-1)*tnrl+1
             rmid2 = rrstart2+nrl
             irend2 = rrstart2+tnrl-1
-            !$OMP PARALLEL DO PRIVATE(i,m)
+            ! Ryan-omp: is the inner stuff thread safe and/or race-condition-safe???
+            !$OMP DO PRIVATE(i,m) SCHEDULE(dynamic,loop_chunk_size)
             Do i = 1, nm_local
                 m = mlocal(i)
                 buff(i)%data(:,rrstart2:rmid2-1) = -m*buff(i)%data(:,rmid:irend)
                 buff(i)%data(:,rmid2:irend2) = m*buff(i)%data(:,rrstart:rmid-1)
             Enddo
-            !$OMP END PARALLEL DO
+            !$OMP END DO
         Else
             ! in-place
+            !$OMP SINGLE
             Allocate(temp(0:lmax,1:nrl))
-            !$OMP PARALLEL DO PRIVATE(i,m,temp)
+            !$OMP END SINGLE
+            ! Ryan-omp: is the inner stuff thread safe and/or race-condition-safe???
+            !$OMP DO PRIVATE(i,m,temp) SCHEDULE(dynamic,loop_chunk_size)
             Do i = 1, nm_local
                 m = mlocal(i)
                 temp(m:lmax,1:nrl) = buff(i)%data(m:lmax,rrstart:rmid-1)    ! save the real piece
@@ -562,8 +587,10 @@ End Subroutine d_sdtheta_4dbuff2arr
                 buff(i)%data(m:lmax,rmid:irend) = m*temp(m:lmax,1:nrl)    ! build new imaginary piece
 
             Enddo
-            !OMP END PARALLEL DO
+            !$OMP END DO
+            !$OMP SINGLE
             DeAllocate(temp)
+            !$OMP END SINGLE
         Endif
 
     End Subroutine d_by_dphi_rlmbuff
@@ -579,25 +606,31 @@ End Subroutine d_sdtheta_4dbuff2arr
 
 
         If (from_ind .ne. to_ind) Then
-            !$OMP PARALLEL DO PRIVATE(i,m)
+            ! Ryan-omp: is the inner stuff thread safe and/or race-condition-safe???
+            !$OMP DO PRIVATE(i,m) SCHEDULE(dynamic,loop_chunk_size)
             Do i = 1, nm_local
                 m = mlocal(i)
                 buff(i)%data(:,:,1,to_ind) = -m*buff(i)%data(:,:,2,from_ind)
                 buff(i)%data(:,:,2,to_ind) =  m*buff(i)%data(:,:,1,from_ind)
             Enddo
-            !$OMP END PARALLEL DO
+            !$OMP END DO
         Else
             ! in-place
+            !$OMP SINGLE
             Allocate(temp(0:lmax,1:nrl))
-            !$OMP PARALLEL DO PRIVATE(i,m,temp)
+            !$OMP END SINGLE
+            ! Ryan-omp: is the inner stuff thread safe and/or race-condition-safe???
+            !$OMP DO PRIVATE(i,m,temp) SCHEDULE(dynamic,loop_chunk_size)
             Do i = 1, nm_local
                 m = mlocal(i)
                 temp(m:lmax,:) = buff(i)%data(m:lmax,:,1,from_ind)
                 buff(i)%data(:,:,1,from_ind) = -m*buff(i)%data(:,:,2,from_ind)
                 buff(i)%data(m:lmax,:,2,from_ind) = m*temp(m:lmax,:)
             Enddo
-            !$OMP END PARALLEL DO
+            !$OMP END DO
+            !$OMP SINGLE
             DeAllocate(temp)
+            !$OMP END SINGLE
         Endif
 
     End Subroutine d_by_dphi_rlmbuff4d

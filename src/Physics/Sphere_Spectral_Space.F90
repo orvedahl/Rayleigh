@@ -93,28 +93,41 @@ Contains
             ctemp%nf1b = 5
         Endif
         Call ctemp%construct('p1a')
+
+        ! Ryan-omp:
+        !$OMP PARALLEL
         ! W..
         Call gridcp%d_by_dr_cp(wvar,d3wdr3,wsp%p1a,3)
+        !$OMP WORKSHARE
         ctemp%p1a(:,:,:,1) = wsp%p1a(:,:,:,d3wdr3)
+        !$OMP END WORKSHARE
 
         Call gridcp%d_by_dr_cp(wvar,dwdr   ,wsp%p1a,1)
         Call gridcp%d_by_dr_cp(wvar,d2wdr2 ,wsp%p1a,2)
         ! P....n
         Call gridcp%d_by_dr_cp(pvar,dpdr1,wsp%p1a,1)
+        !$OMP WORKSHARE
         ctemp%p1a(:,:,:,2) = wsp%p1a(:,:,:,dpdr1)
+        !$OMP END WORKSHARE
         ! T
         Call gridcp%d_by_dr_cp(tvar,d2tdr2,wsp%p1a,2)
+        !$OMP WORKSHARE
         ctemp%p1a(:,:,:,3) = wsp%p1a(:,:,:,d2tdr2)
+        !$OMP END WORKSHARE
         Call gridcp%d_by_dr_cp(tvar,dtdr,wsp%p1a,1)
         ! Z..
         Call gridcp%d_by_dr_cp(zvar,d2zdr2,wsp%p1a,2)
+        !$OMP WORKSHARE
         ctemp%p1a(:,:,:,4) = wsp%p1a(:,:,:,d2zdr2)
+        !$OMP END WORKSHARE
         Call gridcp%d_by_dr_cp(zvar,dzdr,wsp%p1a,1)
 
         ! Magnetism
         If (magnetism) Then
             Call gridcp%d_by_dr_cp(avar,d2adr2,wsp%p1a,2)
+            !$OMP WORKSHARE
             ctemp%p1a(:,:,:,5) = wsp%p1a(:,:,:,d2adr2)
+            !$OMP END WORKSHARE
             Call gridcp%d_by_dr_cp(avar,dadr  ,wsp%p1a,1)
             Call gridcp%d_by_dr_cp(cvar,dcdr  ,wsp%p1a,1)
             Call gridcp%d_by_dr_cp(cvar,d2cdr2,wsp%p1a,2)
@@ -124,14 +137,20 @@ Contains
         ! Now everything we need is in the wsp or ctemp buffer
         ! The ctemp terms are those terms that do not leave this configuration
         ! transform them now & add them to appropriate equations
+        !$OMP SINGLE
         Call ctemp%construct('p1b')
         Call gridcp%dealias_buffer(ctemp%p1a)    ! de-alias
 
         Call gridcp%From_Spectral(ctemp%p1a,ctemp%p1b)
+        !$OMP END SINGLE
         If (output_iteration) Then
             ! Grab dpdr
+            !$OMP SINGLE
             Call cobuffer%construct('p1a')
+            !$OMP END SINGLE
+            !$OMP WORKSHARE
             cobuffer%p1a(:,:,:,dpdr_cb) = ctemp%p1b(:,:,:,2)
+            !$OMP END WORKSHARE
         Endif
 
 
@@ -142,6 +161,7 @@ Contains
         If (magnetism) Then
             Call Add_Derivative(aeq,avar,2,wsp%p1b,ctemp%p1b,5)
         Endif
+        !$OMP SINGLE
         Call ctemp%deconstruct('p1a')
         Call ctemp%deconstruct('p1b')
 
@@ -149,11 +169,20 @@ Contains
         !  Next, we reconstruct ctemp%p1a and copy wsp%p1a into it
         ctemp%nf1a = wsp%nf1a
         Call ctemp%construct('p1a')
+        !$OMP END SINGLE
+        !$OMP WORKSHARE
         ctemp%p1a(:,:,:,:) = wsp%p1a(:,:,:,:)
+        !$OMP END WORKSHARE
+        !$OMP SINGLE
         Call gridcp%dealias_buffer(ctemp%p1a) !De-Alias
+        !$OMP END SINGLE
+        !$OMP WORKSHARE
         wsp%p1a(:,:,:,:) = 0.0d0    ! Shouldn't need to do this, but just to be sure
+        !$OMP END WORKSHARE
+        !$OMP SINGLE
         Call gridcp%From_Spectral(ctemp%p1a,wsp%p1a)
         Call ctemp%deconstruct('p1a')
+        !$OMP END SINGLE
 
         !/////////////////////////////////////////////////////////////////
         !  The rest of the code can remain unchanged
@@ -219,6 +248,7 @@ Contains
         Endif
 
 
+        !$OMP SINGLE
         !Load the old ab array into the RHS
         Call Set_All_RHS(wsp%p1b)    ! RHS now holds old_AB+CN factors
 
@@ -228,6 +258,7 @@ Contains
 
         Call StopWatch(ctranspose_time)%startclock()
 
+        !$OMP END SINGLE
 
 
 
@@ -235,15 +266,19 @@ Contains
             !Convert p/rho to p
             ! We already took d/dr(p/rho), so we'll fix that later
             ! Ryan-omp:
-            !$OMP PARALLEL DO PRIVATE(m,i)
+            !$OMP DO PRIVATE(m,i)
             Do m = 1, my_num_lm
                 Do i = 1, 2
                     wsp%p1a(:,i,m,pvar) = wsp%p1a(:,i,m,pvar)*ref%density(:)
                 Enddo
             Enddo
-            !$OMP END PARALLEL DO
+            !$OMP END DO
+            !$OMP SINGLE
             Call cobuffer%reform()
+            !$OMP END SINGLE
         Endif
+        !$OMP END PARALLEL
+
         Call wsp%reform()    ! move from p1a to s2a
         Call StopWatch(ctranspose_time)%increment()
 
@@ -255,12 +290,18 @@ Contains
         ! p1b contains the new adams bashforth term
         !Call print_max_spec2(pvar)
 
+        ! Ryan-omp:
+        !$OMP PARALLEL
+
         if (.not. nonlinear) then
+            !$OMP WORKSHARE
             wsp%p1b(:,:,:,:) = 0.0d0
+            !$OMP END WORKSHARE
         endif
         if (magnetism) then
             Call Finalize_EMF()
         endif
+        !$OMP END PARALLEL
         Call Add_to_All_RHS(wsp%p1b,new_ab_factor)
         Call Enforce_Boundary_Conditions()
         Call StopWatch(solve_time)%startclock()
@@ -282,31 +323,38 @@ Contains
             ctemp%nf1b = 2
             Call ctemp%construct('p1a')
             Call ctemp%construct('p1b')
-            ctemp%p1a(:,:,:,:) = 0.0d0
             ! Ryan-omp:
-            !$OMP PARALLEL DO PRIVATE(m,i)
+            !$OMP WORKSHARE
+            ctemp%p1a(:,:,:,:) = 0.0d0
+            !$OMP END WORKSHARE
+            !$OMP DO PRIVATE(m,i) SCHEDULE(dynamic,4)
             Do m = 1, my_num_lm
                 Do i = 1, 2
                     ctemp%p1a(:,i,m,1) = wsp%p1b(:,i,m,emfphi)
                 Enddo
             Enddo
-            !$OMP END PARALLEL DO
+            !$OMP END DO
 
+            ! Ryan-omp:
+            !$OMP SINGLE
             Call gridcp%to_spectral(ctemp%p1a,ctemp%p1b)
+            !$OMP END SINGLE
             Call gridcp%d_by_dr_cp(1,2,ctemp%p1b,1)
+            !$OMP SINGLE
             Call gridcp%dealias_buffer(ctemp%p1b)
             Call gridcp%from_spectral(ctemp%p1b,ctemp%p1a)
+            !$OMP END SINGLE
 
 
 
             ! Ryan-omp:
-            !$OMP PARALLEL DO PRIVATE(m,i)
+            !$OMP DO PRIVATE(m,i) SCHEDULE(dynamic,4)
             Do m = 1, my_num_lm
                 Do i = 1, 2
                     wsp%p1b(:,i,m,avar) = wsp%p1b(:,i,m,avar) + ctemp%p1a(:,i,m,2)
                 Enddo
             Enddo
-            !$OMP END PARALLEL DO
+            !$OMP END DO
             Call ctemp%deconstruct('p1a')
             Call ctemp%deconstruct('p1b')
         Else
