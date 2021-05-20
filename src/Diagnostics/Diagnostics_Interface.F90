@@ -158,6 +158,8 @@ Contains
 
 
         If (time_to_output(iteration)) Then
+            ! Ryan-omp:
+            !$OMP SINGLE
             Call Begin_Outputting(iteration)
 
             !//////////////////////////////////////////////////////////////////////////
@@ -189,6 +191,7 @@ Contains
 
             Call Mean_Correction(buffer)    ! Remove ell=0 component from radial and theta forces
 
+            !$OMP END SINGLE
 
             ! All requested Shell_Average quantities are computed twice
             ! During the first pass, ell = 0 and m = 0 averages are computed
@@ -199,8 +202,10 @@ Contains
             ! Compute_quantity returns false on the first pass for everything but shell_averages
             !////////////////////////
             Do pass_num = 1, 2
+                !$OMP SINGLE
                 ! Set the averaging flag, so that all quantities or only shell averages are computed
                 Call Set_Avg_Flag(pass_num)
+             !   !$OMP END SINGLE
 
                 Call Compute_Velocity_Components(buffer)
                 Call Compute_Vorticity_Field(buffer)
@@ -240,10 +245,16 @@ Contains
                     Call Compute_Poynting_Flux(buffer)
                     Call Custom_MHD_Diagnostics(buffer)
                 Endif
+                ! Ryan-omp: force barrier to update averages
+             !   !$OMP BARRIER
+             !   !$OMP SINGLE
                 If (pass_num .eq. 1) Call Finalize_Averages()
+                !$OMP END SINGLE
             Enddo
 
-
+            ! Ryan-omp: force barrier to avoid destroying stuff too soon
+            !$OMP BARRIER
+            !$OMP SINGLE
             DeAllocate(qty,tmp1,tmp1d,tmp4)
             Call Complete_Output(iteration, current_time)
 
@@ -254,6 +265,8 @@ Contains
                 DeAllocate(d2_ell0,d2_m0,d2_fbuffer)
             ENDIF
             Call Finalize_Mean_Correction
+
+            !$OMP END SINGLE
         Endif  ! time_to_output(iteration)
     End Subroutine PS_Output
 

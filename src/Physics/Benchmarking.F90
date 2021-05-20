@@ -615,8 +615,12 @@ Contains
             over_n_phi = 1.0d0/dble(n_phi)
 
 
+            ! Ryan-omp:
+            !$OMP SINGLE
             Allocate(qty(1:n_phi,my_r%min:my_r%max,my_theta%min:my_theta%max,1:num_int))
+            !$OMP END SINGLE
 
+            !$OMP WORKSHARE
             qty(:,:,:,:) = 0.0d0
 
 
@@ -624,6 +628,8 @@ Contains
             qty(1:n_phi,:,:,1) = buffer(1:n_phi,:,:,vphi)**2
             qty(1:n_phi,:,:,1) = qty(1:n_phi,:,:,1)+buffer(1:n_phi,:,:,vr)**2
             qty(1:n_phi,:,:,1) = qty(1:n_phi,:,:,1)+buffer(1:n_phi,:,:,vtheta)**2
+            !$OMP END WORKSHARE
+            !$OMP DO PRIVATE(t,r,p) SCHEDULE(dynamic,2) COLLAPSE(2)
             Do t = my_theta%min, my_theta%max
                 Do r = my_r%min, my_r%max
                     Do p = 1, n_phi
@@ -631,9 +637,11 @@ Contains
                     Enddo
                 Enddo
             Enddo
+            !$OMP END DO
 
 
             !Zonal KE
+            !$OMP DO PRIVATE(t,r,p,tmp) SCHEDULE(dynamic,2) COLLAPSE(2)
             Do t = my_theta%min, my_theta%max
                 Do r = my_r%min, my_r%max
                     ! compute mean v_phi here
@@ -646,8 +654,10 @@ Contains
                     qty(:,r,t,2) = tmp
                 Enddo
             Enddo
+            !$OMP END DO
 
             !Meridional KE
+            !$OMP DO PRIVATE(t,r,p,tmp,tmp2) SCHEDULE(dynamic,2) COLLAPSE(2)
             Do t = my_theta%min, my_theta%max
                 Do r = my_r%min, my_r%max
                     ! compute mean v_phi here
@@ -663,17 +673,21 @@ Contains
                     qty(:,r,t,3) = tmp
                 Enddo
             Enddo
+            !$OMP END DO
 
             If (magnetism) Then
 
+                !$OMP WORKSHARE
                 ! ME
                 qty(1:n_phi,:,:,4) = buffer(1:n_phi,:,:,bphi)**2
                 qty(1:n_phi,:,:,4) = qty(1:n_phi,:,:,4)+buffer(1:n_phi,:,:,br)**2
                 qty(1:n_phi,:,:,4) = (qty(1:n_phi,:,:,4) &
                     & + buffer(1:n_phi,:,:,btheta)**2)
+                !$OMP END WORKSHARE
 
 
                 ! Zonal ME
+                !$OMP DO PRIVATE(t,r,p,tmp) SCHEDULE(dynamic,2) COLLAPSE(2)
                 Do t = my_theta%min, my_theta%max
                     Do r = my_r%min, my_r%max
                         ! compute mean b_phi here
@@ -686,8 +700,10 @@ Contains
                         qty(:,r,t,5) = tmp
                     Enddo
                 Enddo
+                !$OMP END DO
 
                 ! Meridional ME
+                !$OMP DO PRIVATE(t,r,p,tmp,tmp2) SCHEDULE(dynamic,2) COLLAPSE(2)
                 Do t = my_theta%min, my_theta%max
                     Do r = my_r%min, my_r%max
                         tmp = 0.0d0
@@ -702,8 +718,12 @@ Contains
                         qty(:,r,t,6) = tmp
                     Enddo
                 Enddo
+                !$OMP END DO
 
             Endif ! (magnetism)
+
+            ! Ryan-omp: no need for barrier, previous commands use "end do" which is implicit barrier
+            !$OMP SINGLE
 
             Allocate(ell0_values(my_r%min:my_r%max,1:num_int))
             Allocate(volume_integrals(1:num_int), volume_sdev(1:num_int))
@@ -905,6 +925,7 @@ Contains
                 Endif
             Endif
             DeAllocate(volume_integrals,volume_sdev, obs_sdev)
+            !$OMP END SINGLE
         Endif
         Endif
     End Subroutine Benchmark_Checkup

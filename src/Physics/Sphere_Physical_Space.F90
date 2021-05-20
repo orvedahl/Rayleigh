@@ -95,12 +95,12 @@ Contains
             Call Diagnostics_Prep()
         Endif
 
-        ! Ryan-omp: force a barrier to be safe, before doing anything in ps_output
-        !$OMP BARRIER
+        ! Ryan-omp: force a barrier (implicit) to be safe, before doing anything in ps_output
         !$OMP SINGLE
 
         Call StopWatch(sdiv_time)%increment()
 
+        !$OMP END SINGLE
         !////////////////////////////////////////////////////////////////////////
         !This is a good spot to do some simple diagnostic output while we debug the code
         !since velocity components, Pressure, and Temperature are all
@@ -110,6 +110,7 @@ Contains
         Call Benchmark_Checkup(wsp%p3a, iteration,simulation_time)
         !////////////////////////////////////////////////////////////////////////
 
+        !$OMP SINGLE
 
         Call Find_MyMinDT()    ! Piggyback CFL communication on transposes
 
