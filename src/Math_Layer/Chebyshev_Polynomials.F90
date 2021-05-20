@@ -570,6 +570,7 @@ Contains
         Real*8,  Intent(InOut) :: buffer(0:,1:,1:,1:)    ! Makes it easier to reconcile with my IDL code
         Integer, Intent(In)    :: ind, dind, dorder
         Real*8, Allocatable :: dbuffer(:,:,:)
+        !Real*8, Allocatable :: dbuffer(:,:)
         Integer :: dims(4), n,n2,n3, i,j,k, order
         Integer :: kstart, kend, nthr,trank
         Integer :: nglobal, nsub, hoff, hh
@@ -581,22 +582,22 @@ Contains
         n3 = dims(3)
         If (ind .ne. dind) Then
             ! Ryan-omp:
-            !$OMP DO PRIVATE(i,j,k,hh,hoff,n) SCHEDULE(dynamic,loop_chunk_size)
+            !$OMP DO PRIVATE(i,j,k,hh,hoff,n) SCHEDULE(dynamic,loop_chunk_size) COLLAPSE(2)
             Do k = 1, n3
                 Do j = 1, n2
-                hoff = 0
-                DO hh = 1, nsub
-                    !scaling = self%scaling(hh)
-                    n = self%npoly(hh)
+                    hoff = 0
+                    Do hh = 1, nsub
+                        !scaling = self%scaling(hh)
+                        n = self%npoly(hh)
 
-                    buffer(hoff+n-1,j,k,dind) = 0.0d0
-                    buffer(hoff+n-2,j,k,dind) = 2.0d0*(n-1)*buffer(hoff+n-1,j,k,ind) !*scaling
-                    Do i = n-3,0, -1
-                        buffer(hoff+i,j,k,dind) = buffer(hoff+i+2,j,k,dind) &
-                            & +2.0d0*(i+1)*buffer(hoff+i+1,j,k,ind) !*scaling
-                    Enddo
-                    hoff = hoff+self%npoly(hh)
-                ENDDO !hh
+                        buffer(hoff+n-1,j,k,dind) = 0.0d0
+                        buffer(hoff+n-2,j,k,dind) = 2.0d0*(n-1)*buffer(hoff+n-1,j,k,ind) !*scaling
+                        Do i = n-3,0, -1
+                            buffer(hoff+i,j,k,dind) = buffer(hoff+i+2,j,k,dind) &
+                                & +2.0d0*(i+1)*buffer(hoff+i+1,j,k,ind) !*scaling
+                        Enddo
+                        hoff = hoff+self%npoly(hh)
+                    Enddo !hh
                 Enddo
             Enddo
             !$OMP END DO
@@ -604,45 +605,66 @@ Contains
                 ! Ryan-omp: (end single is implicit barrier)
                 !$OMP SINGLE
                 Allocate(dbuffer(0:nglobal-1,1:dorder,0:cp_nthreads-1))
-                !$OMP END SINGLE
+                !Allocate(dbuffer(0:nglobal-1,1:dorder))
+                !!$OMP END SINGLE
 
-#ifdef useomp
-                trank = omp_get_thread_num()
-                nthr  = omp_get_num_threads()
-                kstart = (trank*n3)/nthr+1
-                kend = ((trank+1)*n3)/nthr
-#else
+!#ifdef useomp
+!                trank = omp_get_thread_num()
+!                nthr  = omp_get_num_threads()
+!                kstart = (trank*n3)/nthr+1
+!                kend = ((trank+1)*n3)/nthr
+!#else
                 trank = 0
                 kstart = 1
                 kend = n3
-#endif
-                ! Ryan-omp:
-                !$OMP DO PRIVATE(i,j,k,trank,order,kstart,kend,nthr,n,hh,hoff) SCHEDULE(dynamic,loop_chunk_size)
+!#endif
+                ! manually OMP-ify the loop (using omp do private... gives a seg fault???)
                 Do k = kstart,kend
-
                     Do j = 1, n2
                         dbuffer(:,1,trank) = buffer(:,j,k,dind)
                         Do order = 2, dorder
                             hoff = 0
                             DO hh = 1, nsub
                                 n = self%npoly(hh)
-
-                            dbuffer(hoff+n-1,order,trank) = 0.0d0
-                            dbuffer(hoff+n-2,order,trank) = 2.0d0*(n-1)*dbuffer(hoff+n-1,order-1,trank)
-                            Do i = n -3, 0, -1
-                                dbuffer(hoff+i,order,trank) = dbuffer(hoff+i+2,order,trank)+ &
-                                    & 2.0d0*(i+1)*dbuffer(hoff+i+1,order-1,trank)
-                            Enddo
-                            hoff = hoff+self%npoly(hh)
+                                dbuffer(hoff+n-1,order,trank) = 0.0d0
+                                dbuffer(hoff+n-2,order,trank) = 2.0d0*(n-1)*dbuffer(hoff+n-1,order-1,trank)
+                                Do i = n -3, 0, -1
+                                    dbuffer(hoff+i,order,trank) = dbuffer(hoff+i+2,order,trank)+ &
+                                        & 2.0d0*(i+1)*dbuffer(hoff+i+1,order-1,trank)
+                                Enddo
+                                hoff = hoff+self%npoly(hh)
                             ENDDO
                         Enddo
                         buffer(:,j,k,dind) = dbuffer(:,dorder,trank)
                     Enddo
                 Enddo
-                !$OMP END DO
+                ! Ryan-omp: is this thread-safe and/or race-condition-safe?
+                !!$OMP DO PRIVATE(i,j,k,order,n,hh,hoff) SCHEDULE(dynamic,loop_chunk_size)
+                !Do k = 1, n3
+                !    Do j = 1, n2
+                !        dbuffer(:,1) = buffer(:,j,k,dind)
+                !        Do order = 2, dorder
+                !            hoff = 0
+                !            Do hh = 1, nsub
+                !                n = self%npoly(hh)
+                !                dbuffer(hoff+n-1,order) = 0.0d0
+                !                dbuffer(hoff+n-2,order) = 2.0d0*(n-1)*dbuffer(hoff+n-1,order-1)
+                !                Do i = n -3, 0, -1
+                !                    dbuffer(hoff+i,order) = dbuffer(hoff+i+2,order)+ &
+                !                        & 2.0d0*(i+1)*dbuffer(hoff+i+1,order-1)
+                !                Enddo
+                !                hoff = hoff+self%npoly(hh)
+                !            Enddo
+                !        Enddo
+                !        buffer(:,j,k,dind) = dbuffer(:,dorder)
+                !    Enddo
+                !Enddo
+                !!$OMP END DO
 
-                ! Ryan-omp:
-                !$OMP SINGLE
+                ! Ryan-omp: (end single is implicit barrier) force barrier so array is not
+                ! deallocated before other threads are done using it
+                !!$OMP BARRIER
+                !!$OMP SINGLE
                 DeAllocate(dbuffer)
                 !$OMP END SINGLE
             Endif

@@ -161,6 +161,8 @@ Contains
         If (magnetism) Then
             Call Add_Derivative(aeq,avar,2,wsp%p1b,ctemp%p1b,5)
         Endif
+        ! Ryan-omp: force barrier so p1a/b are not destroyed too soon
+        !$OMP BARRIER
         !$OMP SINGLE
         Call ctemp%deconstruct('p1a')
         Call ctemp%deconstruct('p1b')
@@ -248,6 +250,8 @@ Contains
         Endif
 
 
+        ! Ryan-omp: force barrier so p1b is not destroyed too soon
+        !$OMP BARRIER
         !$OMP SINGLE
         !Load the old ab array into the RHS
         Call Set_All_RHS(wsp%p1b)    ! RHS now holds old_AB+CN factors
@@ -321,9 +325,11 @@ Contains
             ! Will optimize this later.
             ctemp%nf1a = 2
             ctemp%nf1b = 2
+            ! Ryan-omp:
+            !$OMP SINGLE
             Call ctemp%construct('p1a')
             Call ctemp%construct('p1b')
-            ! Ryan-omp:
+            !$OMP END SINGLE
             !$OMP WORKSHARE
             ctemp%p1a(:,:,:,:) = 0.0d0
             !$OMP END WORKSHARE
@@ -355,8 +361,10 @@ Contains
                 Enddo
             Enddo
             !$OMP END DO
+            !$OMP SINGLE
             Call ctemp%deconstruct('p1a')
             Call ctemp%deconstruct('p1b')
+            !$OMP END SINGLE
         Else
             ctemp%nf1a = 1
             Call ctemp%construct('p1a')

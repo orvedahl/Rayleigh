@@ -588,6 +588,7 @@ End Subroutine d_sdtheta_4dbuff2arr
 
             Enddo
             !$OMP END DO
+            ! Ryan-omp: omp end do has implicit barrier, so temp will not be deallocated too soon
             !$OMP SINGLE
             DeAllocate(temp)
             !$OMP END SINGLE
@@ -628,6 +629,7 @@ End Subroutine d_sdtheta_4dbuff2arr
                 buff(i)%data(m:lmax,:,2,from_ind) = m*temp(m:lmax,:)
             Enddo
             !$OMP END DO
+            ! Ryan-omp: omp end do has implicit barrier, so temp will not be deallocated too soon
             !$OMP SINGLE
             DeAllocate(temp)
             !$OMP END SINGLE

@@ -95,6 +95,8 @@ Contains
             Call Diagnostics_Prep()
         Endif
 
+        ! Ryan-omp: force a barrier to be safe, before doing anything in ps_output
+        !$OMP BARRIER
         !$OMP SINGLE
 
         Call StopWatch(sdiv_time)%increment()
@@ -707,6 +709,7 @@ Contains
             !$OMP END WORKSHARE
         Endif
 
+        ! Ryan-omp: omp end workshare has implicit barrier so p3a is not destroyed too soon
         !$OMP SINGLE
         !Everything we need is in main buffer - reset the auxiliary buffer
         Call cobuffer%deconstruct('p3a')

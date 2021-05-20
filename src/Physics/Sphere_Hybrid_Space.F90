@@ -71,6 +71,7 @@ Contains
         Enddo
         !$OMP END DO
 
+        ! Ryan-omp: omp enddo has implicit barrier so fields are not deallocated too soon
         !$OMP SINGLE
 
         ! Allocate two work arrays
@@ -90,6 +91,8 @@ Contains
         If (output_iteration) Call Hybrid_Output_Final()
 
 
+        ! Ryan-omp: force a barrier so fields are not deallocated too soon
+        !$OMP BARRIER
         !$OMP SINGLE
 
         Call DeAllocate_rlm_Field(ftemp1)
@@ -225,6 +228,8 @@ Contains
 
         If (magnetism) Call adjust_emf()
 
+        ! Ryan-omp: force a barrier so fields are not deallocated too soon
+        !$OMP BARRIER
         !$OMP SINGLE
         Call DeAllocate_rlm_Field(ftemp1)
         Call DeAllocate_rlm_Field(ftemp2)
@@ -683,6 +688,8 @@ Contains
         If (magnetism) Then
             ! We compute some derivatives of B as well
             Call BField_Derivatives()
+            ! Ryan-omp: force a barrier so fields are not deallocated too soon
+            !$OMP BARRIER
             !$OMP SINGLE
             Call Deallocate_rlm_Field(ftemp3)
             Call Deallocate_rlm_Field(ftemp4)
@@ -746,6 +753,7 @@ Contains
         END_DO
         !$OMP END DO
 
+        ! Ryan-omp: omp enddo has implicit barrier so fields are not deallocated too soon
         !$OMP SINGLE
         Call DeAllocate_rlm_Field(ftemp3)
         !$OMP END SINGLE
