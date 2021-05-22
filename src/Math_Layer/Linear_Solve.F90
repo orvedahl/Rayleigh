@@ -744,7 +744,7 @@ Module Linear_Solve
         Integer :: itmp
         nullify(coefs)
         indx = 1
-        !$OMP DO PRIVATE(i,nsub,itmp,jj,ii,coefs,indx) SCHEDULE(static,1)
+        !!$OMP DO PRIVATE(i,nsub,itmp,jj,ii,coefs,indx) SCHEDULE(static,1)
         Do i = 1, n_modes
             nsub = nsub_modes(i)-1 !like n_m locally stored for ell(i)
 
@@ -766,7 +766,7 @@ Module Linear_Solve
             Endif
             indx = indx+nsub_modes(i)
         Enddo
-        !$OMP END DO
+        !!$OMP END DO
         nullify(coefs)
         ! It might also be worth making a coef array like coefs(:,dorder,i,eqid), but it would be memory wasteful
         !  since no variable but W has a third derivative, and since we only need the first derivative for P

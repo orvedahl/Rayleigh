@@ -136,7 +136,7 @@ Contains
         Endif
 
 
-        !$OMP PARALLEL
+        !!$OMP PARALLEL
         Call Add_Derivative(peq,wvar,3,wsp%p1b,ctemp%p1b,1)
         Call Add_Derivative(weq,pvar,1,wsp%p1b,ctemp%p1b,2)
         Call Add_Derivative(teq,tvar,2,wsp%p1b,ctemp%p1b,3)
@@ -144,7 +144,7 @@ Contains
         If (magnetism) Then
             Call Add_Derivative(aeq,avar,2,wsp%p1b,ctemp%p1b,5)
         Endif
-        !$OMP END PARALLEL
+        !!$OMP END PARALLEL
 
         Call ctemp%deconstruct('p1a')
         Call ctemp%deconstruct('p1b')
@@ -164,7 +164,7 @@ Contains
         !/////////////////////////////////////////////////////////////////
         !Load the W derivatives into the appropriate RHS's
 
-        !$OMP PARALLEL
+        !!$OMP PARALLEL
         Call Add_Derivative(peq,wvar,0,wsp%p1b,wsp%p1a,wvar)
         Call Add_Derivative(peq,wvar,1,wsp%p1b,wsp%p1a,dwdr)
         Call Add_Derivative(peq,wvar,2,wsp%p1b,wsp%p1a,d2wdr2)
@@ -223,7 +223,7 @@ Contains
 
         Endif
 
-        !$OMP END PARALLEL
+        !!$OMP END PARALLEL
 
         !Load the old ab array into the RHS
         Call Set_All_RHS(wsp%p1b)    ! RHS now holds old_AB+CN factors
