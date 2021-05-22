@@ -542,8 +542,6 @@ Contains
         Implicit None
         Real*8, Intent(In) :: qty(1:,my_rmin:,my_theta_min:) 
         Integer :: i, m ,t ,r , p
-        ! Ryan-omp: basically the single means this can be called from inside an omp parallel region
-        !$OMP SINGLE
         If (IOavg_flag .eq. 1) Then
             !On first pass, store the azimuthal average of shell_avg qtys
             If (Outputs(Shell_Avgs)%grab_this_q) Then
@@ -576,7 +574,6 @@ Contains
             Enddo
 
         Endif
-        !$OMP END SINGLE
 
     End Subroutine  Add_Quantity
 

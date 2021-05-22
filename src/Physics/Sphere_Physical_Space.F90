@@ -37,8 +37,6 @@ Module Sphere_Physical_Space
     Use Benchmarking, Only : benchmark_checkup
     Implicit None
 
-    Integer, Private :: loop_chunk_size = 2
-
 Contains
     Subroutine physical_space()
         Implicit None
@@ -47,13 +45,10 @@ Contains
         ! 1st, get the phi derivatives
         Call StopWatch(dphi_time)%startclock()
 
-        ! Ryan-omp:
-        !$OMP PARALLEL
         Call Phi_Derivatives()
         If (output_iteration) Then
             Call Diagnostics_Copy_and_Derivs()
         Endif
-        !$OMP SINGLE
         Call StopWatch(dphi_time)%increment()
 
 
@@ -68,7 +63,7 @@ Contains
         ! Convert all our terms of the form "sintheta var" to "var"
         Call StopWatch(sdiv_time)%startclock()
 
-        !$OMP END SINGLE
+        !$OMP PARALLEL
 
         Call sintheta_div(vtheta)    ! sintheta vtheta to vtheta etc.
         Call sintheta_div(vphi)
@@ -95,12 +90,10 @@ Contains
             Call Diagnostics_Prep()
         Endif
 
-        ! Ryan-omp: force a barrier (implicit) to be safe, before doing anything in ps_output
-        !$OMP SINGLE
+        !$OMP END PARALLEL
 
         Call StopWatch(sdiv_time)%increment()
 
-        !$OMP END SINGLE
         !////////////////////////////////////////////////////////////////////////
         !This is a good spot to do some simple diagnostic output while we debug the code
         !since velocity components, Pressure, and Temperature are all
@@ -110,24 +103,18 @@ Contains
         Call Benchmark_Checkup(wsp%p3a, iteration,simulation_time)
         !////////////////////////////////////////////////////////////////////////
 
-        !$OMP SINGLE
-
         Call Find_MyMinDT()    ! Piggyback CFL communication on transposes
 
 
         ! We are now ready to build the nonlinear terms
         Call wsp%construct('p3b')
         wsp%config = 'p3b'
-        !$OMP END SINGLE
-        !$OMP WORKSHARE
         wsp%p3b(:,:,:,:) = 0.0d0
-        !$OMP END WORKSHARE
         !................................
         !Nonlinear Advection
-        !$OMP SINGLE
         Call StopWatch(nl_time)%startclock()
-        !$OMP END SINGLE
 
+        !$OMP PARALLEL
         Call Temperature_Advection()
         Call Volumetric_Heating()
         If (viscous_heating) Call Compute_Viscous_Heating()
@@ -169,8 +156,7 @@ Contains
         Implicit None
         Integer :: t, r,k
 
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(k,r,t) COLLAPSE(2) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(k,r,t) COLLAPSE(2) SCHEDULE(static,1)
         DO_IDX
             wsp%p3a(IDX,dvtdt) = -wsp%p3a(IDX,vr)*(radius(r)*ref%dlnrho(r)+2.0d0) &
                                         - radius(r)*wsp%p3a(IDX,dvrdr) &
@@ -184,8 +170,7 @@ Contains
     Subroutine Compute_dvphi_by_dtheta()
         Implicit None
         Integer :: t, r,k
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(k,r,t) COLLAPSE(2) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(k,r,t) COLLAPSE(2) SCHEDULE(static,1)
         DO_IDX
             wsp%p3a(IDX,dvpdt) = radius(r)*wsp%p3a(IDX,zvar)+wsp%p3a(IDX,dvtdp)*csctheta(t) &
             -wsp%p3a(IDX,vphi)*cottheta(t)
@@ -195,8 +180,7 @@ Contains
 
     Subroutine Temperature_Advection()
         Integer :: t,r,k
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(t,r,k) COLLAPSE(2) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(t,r,k) COLLAPSE(2) SCHEDULE(static,1)
         Do t = my_theta%min, my_theta%max
             Do r = my_r%min, my_r%max
                 Do k =1, n_phi
@@ -217,8 +201,7 @@ Contains
         Integer :: t,r,k
         If (heating_type .gt. 0) Then
             ! Added a volumetric heating to the energy equation
-            ! Ryan-omp:
-            !$OMP DO PRIVATE(t,r,k) COLLAPSE(2) SCHEDULE(dynamic,loop_chunk_size)
+            !$OMP DO PRIVATE(t,r,k) COLLAPSE(2) SCHEDULE(static,1)
             Do t = my_theta%min, my_theta%max
                 Do r = my_r%min, my_r%max
                     Do k =1, n_phi
@@ -245,8 +228,7 @@ Contains
 
         !Contributions from E_rr, E_theta_theta     & E_phi_phi
 
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(t,r,k,tmp,tmp2) COLLAPSE(2) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(t,r,k,tmp,tmp2) COLLAPSE(2) SCHEDULE(static,1)
         Do t = my_theta%min, my_theta%max
             Do r = my_r%min, my_r%max
                 Do k =1, n_phi
@@ -261,8 +243,7 @@ Contains
         !$OMP END DO
 
         !E_r_phi
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(t,r,k,tmp) COLLAPSE(2) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(t,r,k,tmp) COLLAPSE(2) SCHEDULE(static,1)
         Do t = my_theta%min, my_theta%max
             Do r = my_r%min, my_r%max
                 Do k =1, n_phi
@@ -278,8 +259,7 @@ Contains
 
 
         !E_r_theta
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(t,r,k,tmp) COLLAPSE(2) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(t,r,k,tmp) COLLAPSE(2) SCHEDULE(static,1)
         Do t = my_theta%min, my_theta%max
             Do r = my_r%min, my_r%max
                 Do k =1, n_phi
@@ -295,8 +275,7 @@ Contains
 
 
         !E_phi_theta
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(t,r,k,tmp) COLLAPSE(2) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(t,r,k,tmp) COLLAPSE(2) SCHEDULE(static,1)
         Do t = my_theta%min, my_theta%max
             Do r = my_r%min, my_r%max
                 Do k =1, n_phi
@@ -313,8 +292,7 @@ Contains
 
 
         ! -1/3 (div dot v )**2
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(t,r,k,tmp) COLLAPSE(2) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(t,r,k,tmp) COLLAPSE(2) SCHEDULE(static,1)
         Do t = my_theta%min, my_theta%max
             Do r = my_r%min, my_r%max
                 Do k =1, n_phi
@@ -328,8 +306,7 @@ Contains
 
 
 
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(t,r,k) COLLAPSE(2) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(t,r,k) COLLAPSE(2) SCHEDULE(static,1)
         Do t = my_theta%min, my_theta%max
             Do r = my_r%min, my_r%max
                 Do k =1, n_phi
@@ -355,8 +332,7 @@ Contains
         If (Ohmic_Heating) Then
             !We need a prefactor here for nondimensionalization
 
-            ! Ryan-omp:
-            !$OMP DO PRIVATE(t,r,k) COLLAPSE(2) SCHEDULE(dynamic,loop_chunk_size)
+            !$OMP DO PRIVATE(t,r,k) COLLAPSE(2) SCHEDULE(static,1)
             Do t = my_theta%min, my_theta%max
                 Do r = my_r%min, my_r%max
                     Do k =1, n_phi
@@ -378,9 +354,8 @@ Contains
 
         ! Build -radius^2 [u dot grad u]_r
 
-        ! Ryan-omp:
         If (momentum_advection) Then
-            !$OMP DO PRIVATE(t,r,k) COLLAPSE(2) SCHEDULE(dynamic,loop_chunk_size)
+            !$OMP DO PRIVATE(t,r,k) COLLAPSE(2) SCHEDULE(static,1)
             DO_IDX
                 RHSP(IDX,wvar) = -FIELDSP(IDX,vr)*FIELDSP(IDX,dvrdr)*r_squared(r) &
                     - FIELDSP(IDX,vtheta) * ( FIELDSP(IDX,dvrdt)-FIELDSP(IDX,vtheta) )*radius(r)    &
@@ -388,7 +363,7 @@ Contains
             END_DO
             !$OMP END DO
         Else
-            !$OMP DO PRIVATE(t,r,k) COLLAPSE(2) SCHEDULE(dynamic,loop_chunk_size)
+            !$OMP DO PRIVATE(t,r,k) COLLAPSE(2) SCHEDULE(static,1)
             DO_IDX
                 RHSP(IDX,wvar) = 0.0d0
             END_DO
@@ -398,7 +373,7 @@ Contains
         ! Add Coriolis Terms if so desired
         If (rotation) Then
         !    ! [- 2 z_hat cross u ]_r = 2 sintheta u_phi
-            !$OMP DO PRIVATE(t,r,k) COLLAPSE(2) SCHEDULE(dynamic,loop_chunk_size)
+            !$OMP DO PRIVATE(t,r,k) COLLAPSE(2) SCHEDULE(static,1)
             DO_IDX
                 RHSP(IDX,wvar) = RHSP(IDX,wvar) + &
                     & ref%Coriolis_Coeff*sintheta(t)*FIELDSP(IDX,vphi)*R_squared(r)
@@ -408,7 +383,7 @@ Contains
 
 
         ! Multiply advection/coriolis pieces by rho
-        !$OMP DO PRIVATE(t,r,k) COLLAPSE(2) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(t,r,k) COLLAPSE(2) SCHEDULE(static,1)
         DO_IDX
             RHSP(IDX,wvar) = RHSP(IDX,wvar)*ref%density(r)
         END_DO
@@ -417,7 +392,7 @@ Contains
 
         If (magnetism .and. lorentz_forces) Then
             ! Add r_squared [JxB]_r
-            !$OMP DO PRIVATE(t,r,k) COLLAPSE(2) SCHEDULE(dynamic,loop_chunk_size)
+            !$OMP DO PRIVATE(t,r,k) COLLAPSE(2) SCHEDULE(static,1)
             DO_IDX
                 RHSP(IDX,wvar)= RHSP(IDX,wvar) +r_squared(r)*ref%Lorentz_Coeff* &
                     (FIELDSP(IDX,curlbtheta)*FIELDSP(IDX,bphi)-FIELDSP(IDX,curlbphi)*FIELDSP(IDX,btheta))
@@ -434,8 +409,7 @@ Contains
 
         ! Build the emf
 
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(t,r,k) COLLAPSE(2) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(t,r,k) COLLAPSE(2) SCHEDULE(static,1)
         DO_IDX
             RHSP(IDX,emfr) = &
                   FIELDSP(IDX,vtheta) *  FIELDSP(IDX,bphi)  &
@@ -443,7 +417,7 @@ Contains
         END_DO
         !$OMP END DO NOWAIT
 
-        !$OMP DO PRIVATE(t,r,k) COLLAPSE(2) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(t,r,k) COLLAPSE(2) SCHEDULE(static,1)
         DO_IDX
             RHSP(IDX,emftheta) = &
                 - FIELDSP(IDX,vr) *  FIELDSP(IDX,bphi)  &
@@ -451,7 +425,7 @@ Contains
         END_DO
         !$OMP END DO NOWAIT
 
-        !$OMP DO PRIVATE(t,r,k) COLLAPSE(2) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(t,r,k) COLLAPSE(2) SCHEDULE(static,1)
         DO_IDX
             RHSP(IDX,emfphi) = &
                   FIELDSP(IDX,vr)     *  FIELDSP(IDX,btheta)  &
@@ -460,13 +434,13 @@ Contains
         !$OMP END DO
 
         ! We need to divide by r/sintheta before taking the derivatives in the next space
-        !$OMP DO PRIVATE(t,r,k) COLLAPSE(2) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(t,r,k) COLLAPSE(2) SCHEDULE(static,1)
         DO_IDX
             RHSP(IDX,emfphi) = RHSP(IDX,emfphi)*csctheta(t)*radius(r)
         END_DO
         !$OMP END DO NOWAIT
 
-        !$OMP DO PRIVATE(t,r,k) COLLAPSE(2) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(t,r,k) COLLAPSE(2) SCHEDULE(static,1)
         DO_IDX
             RHSP(IDX,emftheta) = RHSP(IDX,emftheta)*csctheta(t)*radius(r)
         END_DO
@@ -479,10 +453,9 @@ Contains
         Integer :: t, r,k
         ! Build (radius/sintheta)[u dot grad u]_theta
 
-        ! Ryan-omp:
         If (momentum_advection) Then
             ! First add all the terms that get multiplied by u_theta
-            !$OMP DO PRIVATE(t,r,k) COLLAPSE(2) SCHEDULE(dynamic,loop_chunk_size)
+            !$OMP DO PRIVATE(t,r,k) COLLAPSE(2) SCHEDULE(static,1)
             DO_IDX
                 RHSP(IDX,pvar) = wsp%p3a(IDX,dvrdr)       &
                      + ( wsp%p3a(IDX,dvpdp)*csctheta(t)    & ! vphi/sintheta/r dvrdphi        !check this comment...
@@ -492,7 +465,7 @@ Contains
             END_DO
             !$OMP END DO
 
-            !$OMP DO PRIVATE(t,r,k) COLLAPSE(2) SCHEDULE(dynamic,loop_chunk_size)
+            !$OMP DO PRIVATE(t,r,k) COLLAPSE(2) SCHEDULE(static,1)
             DO_IDX
                 RHSP(IDX,pvar) = -RHSP(IDX,pvar)*wsp%p3a(IDX,vtheta) & ! multiply by -u_theta
                     + wsp%p3a(IDX,vr  )*wsp%p3a(IDX,dvtdr)                         & ! vr dvthetadr
@@ -502,7 +475,7 @@ Contains
             END_DO
             !$OMP END DO
         Else
-            !$OMP DO PRIVATE(t,r,k) COLLAPSE(2) SCHEDULE(dynamic,loop_chunk_size)
+            !$OMP DO PRIVATE(t,r,k) COLLAPSE(2) SCHEDULE(static,1)
             DO_IDX
                 RHSP(IDX,pvar) = 0.0d0
             END_DO
@@ -513,7 +486,7 @@ Contains
             ! Add - the coriolis term (part of -RHS of theta)
             ! [2 z_hat cross u]_theta = -2 costheta u_phi
 
-            !$OMP DO PRIVATE(t,r,k) COLLAPSE(2) SCHEDULE(dynamic,loop_chunk_size)
+            !$OMP DO PRIVATE(t,r,k) COLLAPSE(2) SCHEDULE(static,1)
             DO_IDX
                 RHSP(IDX,pvar) = RHSP(IDX,pvar)- ref%Coriolis_Coeff*costheta(t)*FIELDSP(IDX,vphi)
             END_DO
@@ -521,7 +494,7 @@ Contains
         Endif
 
         ! Multiply advection/coriolis pieces by rho
-        !$OMP DO PRIVATE(t,r,k) COLLAPSE(2) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(t,r,k) COLLAPSE(2) SCHEDULE(static,1)
         DO_IDX
             RHSP(IDX,pvar) = RHSP(IDX,pvar)*ref%density(r)
         END_DO
@@ -529,7 +502,7 @@ Contains
 
         If (magnetism .and. lorentz_forces) Then
             ! Add -[JxB]_theta
-            !$OMP DO PRIVATE(t,r,k) COLLAPSE(2) SCHEDULE(dynamic,loop_chunk_size)
+            !$OMP DO PRIVATE(t,r,k) COLLAPSE(2) SCHEDULE(static,1)
             DO_IDX
                 RHSP(IDX,pvar)= RHSP(IDX,pvar) &
                     - ref%Lorentz_Coeff*(FIELDSP(IDX,curlbphi)*FIELDSP(IDX,br)-FIELDSP(IDX,curlbr)*FIELDSP(IDX,bphi))
@@ -542,7 +515,7 @@ Contains
 
         ! At this point, we have [u dot grad u]_theta
         ! Multiply by radius/sintheta so that we have r[u dot grad u]_theta/sintheta (getting ready for Z and dWdr RHS building)
-        !$OMP DO PRIVATE(t,r,k) COLLAPSE(2) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(t,r,k) COLLAPSE(2) SCHEDULE(static,1)
         DO_IDX
             RHSP(IDX,pvar) = RHSP(IDX,pvar)*radius(r)*csctheta(t)
         END_DO
@@ -557,9 +530,8 @@ Contains
         ! Build (radius/sintheta)[u dot grad u]_phi
 
 
-        ! Ryan-omp:
         If (momentum_advection) Then
-            !$OMP DO PRIVATE(t,r,k) COLLAPSE(2) SCHEDULE(dynamic,loop_chunk_size)
+            !$OMP DO PRIVATE(t,r,k) COLLAPSE(2) SCHEDULE(static,1)
             DO_IDX
                 RHSP(IDX,zvar) = FIELDSP(IDX,vtheta)*(FIELDSP(IDX,zvar)  & ! terms multiplied by u_theta
                                         +FIELDSP(IDX,dvtdp)*csctheta(t)*one_over_r(r)) &
@@ -570,7 +542,7 @@ Contains
             !$OMP END DO
 
         Else
-            !$OMP DO PRIVATE(t,r,k) COLLAPSE(2) SCHEDULE(dynamic,loop_chunk_size)
+            !$OMP DO PRIVATE(t,r,k) COLLAPSE(2) SCHEDULE(static,1)
             DO_IDX
                 RHSP(IDX,zvar) = 0.0d0
             END_DO
@@ -579,7 +551,7 @@ Contains
 
         If (rotation) Then
             ! Add - Coriolis term (we are building -RHS of vphi)
-            !$OMP DO PRIVATE(t,r,k) COLLAPSE(2) SCHEDULE(dynamic,loop_chunk_size)
+            !$OMP DO PRIVATE(t,r,k) COLLAPSE(2) SCHEDULE(static,1)
             DO_IDX
                 RHSP(IDX,zvar) = RHSP(IDX,zvar)                        &
                      + ref%Coriolis_Coeff*costheta(t)*FIELDSP(IDX,vtheta) &
@@ -589,7 +561,7 @@ Contains
         Endif
 
         ! Multiply advection/coriolis pieces by rho
-        !$OMP DO PRIVATE(t,r,k) COLLAPSE(2) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(t,r,k) COLLAPSE(2) SCHEDULE(static,1)
         DO_IDX
             RHSP(IDX,zvar) = RHSP(IDX,zvar)*ref%density(r)
         END_DO
@@ -597,7 +569,7 @@ Contains
 
         If (magnetism .and. lorentz_forces) Then
             ! Add -[JxB]_phi
-            !$OMP DO PRIVATE(t,r,k) COLLAPSE(2) SCHEDULE(dynamic,loop_chunk_size)
+            !$OMP DO PRIVATE(t,r,k) COLLAPSE(2) SCHEDULE(static,1)
             DO_IDX
                 RHSP(IDX,zvar)= RHSP(IDX,zvar) - &
                     ref%Lorentz_Coeff*(FIELDSP(IDX,curlbr)*FIELDSP(IDX,btheta)-FIELDSP(IDX,curlbtheta)*FIELDSP(IDX,br))
@@ -610,7 +582,7 @@ Contains
 
         ! At this point, we have [u dot grad u]_phi
         ! Multiply by radius/sintheta so that we have r[u dot grad u]_phi/sintheta (getting ready for Z and dWdr RHS building)
-        !$OMP DO PRIVATE(t,r,k) COLLAPSE(2) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(t,r,k) COLLAPSE(2) SCHEDULE(static,1)
         DO_IDX
             RHSP(IDX,zvar) = RHSP(IDX,zvar)*radius(r)*csctheta(t)
         END_DO
@@ -621,19 +593,20 @@ Contains
         Implicit None
         Integer :: r,t,k
 
+        !$OMP PARALLEL
 
         Call d_by_dphi(wsp%p3a,vr,dvrdp)
         Call d_by_dphi(wsp%p3a,vtheta,dvtdp)
         Call d_by_dphi(wsp%p3a,vphi,dvpdp)
         Call d_by_dphi(wsp%p3a,tvar,dtdp)
+        !$OMP END PARALLEL
     End Subroutine Phi_Derivatives
     Subroutine sintheta_div(ind)
         ! Divide by sintheta
         Implicit None
         Integer, Intent(In) :: ind
         Integer :: t,r,k
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(t,r,k) COLLAPSE(2) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(t,r,k) COLLAPSE(2) SCHEDULE(static,1)
         DO_IDX
             FIELDSP(IDX,ind) = FIELDSP(IDX,ind)*csctheta(t)
         END_DO
@@ -645,8 +618,7 @@ Contains
         !divide by rsintheta
         Integer, Intent(In) :: ind
         Integer :: t,r,k
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(t,r,k) COLLAPSE(2) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(t,r,k) COLLAPSE(2) SCHEDULE(static,1)
         DO_IDX
             FIELDSP(IDX,ind) = FIELDSP(IDX,ind)*csctheta(t)*one_over_r(r)
         END_DO
@@ -694,7 +666,8 @@ Contains
         Integer :: t,r,k
         !Copy everything from out auxiliary output buffer into the main buffer
 
-        ! Ryan-omp:
+        !$OMP PARALLEL
+
         !$OMP WORKSHARE
         wsp%p3a(:,:,:,dpdr) = cobuffer%p3a(:,:,:,dpdr_cb)
         wsp%p3a(:,:,:,dpdt) = cobuffer%p3a(:,:,:,dpdt_cb)
@@ -709,14 +682,13 @@ Contains
             wsp%p3a(:,:,:,dbrdt) = cobuffer%p3a(:,:,:,dbrdt_cb)
             !$OMP END WORKSHARE
         Endif
+        !$OMP END PARALLEL
 
-        ! Ryan-omp: omp end workshare has implicit barrier so p3a is not destroyed too soon
-        !$OMP SINGLE
         !Everything we need is in main buffer - reset the auxiliary buffer
         Call cobuffer%deconstruct('p3a')
         cobuffer%config = 'p1a'
-        !$OMP END SINGLE
 
+        !$OMP PARALLEL
         !Take phi derivatives
         Call d_by_dphi(wsp%p3a,pvar,dpdp)
         If (magnetism) Then
@@ -724,6 +696,7 @@ Contains
             Call d_by_dphi(wsp%p3a,btheta,dbtdp)
             Call d_by_dphi(wsp%p3a,bphi,dbpdp)
         Endif
+        !$OMP END PARALLEL
 
 
     End Subroutine Diagnostics_Copy_and_Derivs
@@ -733,8 +706,7 @@ Contains
         Integer :: t,r,k
         Call sintheta_div(dpdt)
         !convert d/dr(p/rho) to dpdr
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(k,r,t) COLLAPSE(2) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(k,r,t) COLLAPSE(2) SCHEDULE(static,1)
         DO_IDX
             wsp%p3a(IDX,dpdr) = wsp%p3a(IDX,dpdr)*ref%density(r)+ &
                                 & wsp%p3a(IDX,pvar)*ref%dlnrho(r)
@@ -763,8 +735,7 @@ Contains
         Implicit None
         Integer :: t, r,k
 
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(k,r,t) COLLAPSE(2) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(k,r,t) COLLAPSE(2) SCHEDULE(static,1)
         DO_IDX
             wsp%p3a(IDX,dbtdt) = - wsp%p3a(IDX,br)*2.0d0 &
                                  - radius(r)*wsp%p3a(IDX,dbrdr) &
@@ -779,8 +750,7 @@ Contains
         Implicit None
         Integer :: t, r,k
         !Note: the A streamfunction was stored in dbpdt earlier.  We overwrite it with actual d B_phi d_theta now
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(k,r,t) COLLAPSE(2) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(k,r,t) COLLAPSE(2) SCHEDULE(static,1)
         DO_IDX
             wsp%p3a(IDX,dbpdt) = radius(r)*wsp%p3a(IDX,dbpdt)+wsp%p3a(IDX,dbtdp)*csctheta(t) &
             -wsp%p3a(IDX,bphi)*cottheta(t)

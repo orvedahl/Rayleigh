@@ -37,8 +37,6 @@ Module Sphere_Hybrid_Space
     Implicit None
     Real*8, Allocatable :: over_rhor(:), over_rhorsq(:), drho_term(:)
 
-    Integer, Private :: loop_chunk_size = 2
-
     Type(rmcontainer3D), Allocatable :: ftemp1(:), ftemp2(:),ftemp3(:), ftemp4(:)
 Contains
 
@@ -63,22 +61,18 @@ Contains
         Call StopWatch(rlma_time)%startclock()
 
         ! Zero out l_max mode
-        ! Ryan-omp:
-        !$OMP PARALLEL
-        !$OMP DO PRIVATE(mp)
+        !$OMP PARALLEL DO PRIVATE(mp) SCHEDULE(static,1)
         Do mp = my_mp%min, my_mp%max
             SBUFFA(l_max,:,:,:) = 0.0d0
         Enddo
-        !$OMP END DO
+        !$OMP END PARALLEL DO
 
-        ! Ryan-omp: omp enddo has implicit barrier so fields are not deallocated too soon
-        !$OMP SINGLE
 
         ! Allocate two work arrays
         Call Allocate_rlm_Field(ftemp1)
         Call Allocate_rlm_Field(ftemp2)
-        !$OMP END SINGLE
 
+        !$OMP PARALLEL
         If (output_iteration) Call Hybrid_Output_Initial()
 
         Call Velocity_Components()
@@ -88,27 +82,19 @@ Contains
 
         If (magnetism) Call compute_BandCurlB()
 
+        !$OMP END PARALLEL
+
         If (output_iteration) Call Hybrid_Output_Final()
-
-
-        ! Ryan-omp: force a barrier so fields are not deallocated too soon
-        !$OMP BARRIER
-        !$OMP SINGLE
 
         Call DeAllocate_rlm_Field(ftemp1)
         Call DeAllocate_rlm_Field(ftemp2)
 
-        !$OMP END SINGLE
-
         ! Zero out l_max mode
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(mp) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP PARALLEL DO PRIVATE(mp) SCHEDULE(static,1)
         Do mp = my_mp%min, my_mp%max
             wsp%s2a(mp)%data(l_max,:,:,:) = 0.0d0
         Enddo
-        !$OMP END DO
-
-        !$OMP END PARALLEL
+        !$OMP END PARALLEL DO
 
         Call StopWatch(rlma_time)%increment()
 
@@ -159,28 +145,24 @@ Contains
         ! The NL RHS for W is r^2/(l(l+1)) * the NL RHS for Ur
         ! We already have the r^2 taken care of.  Now for the l(l+1)
 
-        ! Ryan-omp:
-        !$OMP PARALLEL
-        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP PARALLEL DO PRIVATE(mp,m,imi,r) SCHEDULE(static,1)
         DO_IDX2
             SBUFFB(IDX2,wvar) = SBUFFB(IDX2,wvar)*over_l_l_plus1(m:l_max)
         END_DO
-        !$OMP END DO
+        !$OMP END PARALLEL DO
 
         ! Now for the Z RHS, formed from the radial component of the curl of u dot grad u
 
-        !$OMP SINGLE
-
         Call Allocate_rlm_Field(ftemp1)
         Call Allocate_rlm_Field(ftemp2)
-        !$OMP END SINGLE
+
+        !$OMP PARALLEL
 
         Call d_by_sdtheta(wsp%s2b, zvar,ftemp1)    ! need to be sure we have this indexing correct
         Call d_by_dphi(wsp%s2b,pvar,ftemp2)
 
 
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(static,1)
         DO_IDX2
             ftemp1(mp)%data(IDX2) = ( ftemp2(mp)%data(IDX2)- &
                 & ftemp1(mp)%data(IDX2) )*over_l_l_plus1(m:l_max)
@@ -192,8 +174,7 @@ Contains
         Call d_by_dphi(wsp%s2b,zvar,ftemp2)
         Call d_by_sdtheta(wsp%s2b,pvar,zvar)
 
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(static,1)
         DO_IDX2
             SBUFFB(IDX2,pvar) = ( SBUFFB(IDX2,zvar)+ &
                 & ftemp2(mp)%data(IDX2) )*over_l_l_plus1(m:l_max)
@@ -202,8 +183,7 @@ Contains
         ! dwdr RHS (p equation) is now loaded
 
 
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(static,1)
         DO_IDX2
             SBUFFB(IDX2,zvar) = ftemp1(mp)%data(IDX2)
         END_DO
@@ -213,8 +193,7 @@ Contains
 
 
         ! The ell =0 w and p and z equations have zero RHS
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(mp,m) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(mp,m) SCHEDULE(static,1)
         Do mp = my_mp%min, my_mp%max
             m = m_values(mp)
             if (m .eq. 0) then
@@ -225,26 +204,20 @@ Contains
         Enddo
         !$OMP END DO
 
+        !$OMP END PARALLEL
 
         If (magnetism) Call adjust_emf()
 
-        ! Ryan-omp: force a barrier so fields are not deallocated too soon
-        !$OMP BARRIER
-        !$OMP SINGLE
+
         Call DeAllocate_rlm_Field(ftemp1)
         Call DeAllocate_rlm_Field(ftemp2)
-        !$OMP END SINGLE
-
 
         ! Zero out l_max mode
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(mp) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP PARALLEL DO PRIVATE(mp) SCHEDULE(static,1)
         Do mp = my_mp%min, my_mp%max
             SBUFFB(l_max,:,:,:) = 0.0d0
         Enddo
-        !$OMP END DO
-
-        !$OMP END PARALLEL
+        !$OMP END PARALLEL DO
 
         Call StopWatch(rlmb_time)%increment()
 
@@ -263,8 +236,7 @@ Contains
         ! Compute sin(theta) dP/dtheta and
         ! place it in the cobuffer
         Call d_by_dtheta(wsp%s2a,pvar,ftemp1)
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(static,1)
         DO_IDX2
             ASBUFFA(IDX2,dpdt_cb) = ftemp1(mp)%data(IDX2)
         END_DO
@@ -279,8 +251,7 @@ Contains
         ! Compute the velocity vield
 
         ! vr    overwrites w
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(mp,m,imi,r)
+        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(static,1)
         DO_IDX2
             SBUFFA(IDX2,vr) = l_l_plus1(m:l_max)*SBUFFA(IDX2,vr)*Over_RhoRSQ(r)
         END_DO
@@ -290,15 +261,13 @@ Contains
         Call d_by_dtheta(wsp%s2a,dwdr,ftemp1)
         Call d_by_dphi(wsp%s2a,zvar,    ftemp2)
 
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(mp,m,imi,r)
+        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(static,1)
         DO_IDX2
             ftemp1(mp)%data(IDX2) = ftemp1(mp)%data(IDX2)+ftemp2(mp)%data(IDX2)
         END_DO
         !$OMP END DO
 
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(mp,m,imi,r)
+        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(static,1)
         DO_IDX2
                 SBUFFA(IDX2,vtheta) = ftemp1(mp)%data(IDX2)*Over_RhoR(r)
         END_DO
@@ -307,15 +276,13 @@ Contains
         ! Now sintheta v_phi
         Call   d_by_dphi(wsp%s2a,dwdr,    ftemp1)
         Call d_by_dtheta(wsp%s2a,zvar,ftemp2)
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(mp,m,imi,r)
+        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(static,1)
         DO_IDX2
             ftemp1(mp)%data(IDX2) = ftemp1(mp)%data(IDX2)-ftemp2(mp)%data(IDX2)
         END_DO
         !$OMP END DO
 
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(mp,m,imi,r)
+        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(static,1)
         DO_IDX2
             SBUFFA(IDX2,vphi) = ftemp1(mp)%data(IDX2)*Over_RhoR(r)
         END_DO
@@ -333,15 +300,13 @@ Contains
         Call d_by_dphi(wsp%s2a,dzdr,    ftemp2)       ! Will overwrite this with dTdtheta shortly
 
 
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(static,1)
         DO_IDX2
             ftemp1(mp)%data(IDX2) = ftemp1(mp)%data(IDX2)+ftemp2(mp)%data(IDX2)
         END_DO
         !$OMP END DO
 
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(static,1)
         DO_IDX2
             SBUFFA(IDX2,dvtdr) = ftemp1(mp)%data(IDX2)*Over_RhoR(r)
         END_DO
@@ -351,8 +316,7 @@ Contains
         ! Notice that there is a -u_theta/r term above.  These should be combined
         ! for efficiency later
 
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(static,1)
         DO_IDX2
             SBUFFA(IDX2,dvtdr) = SBUFFA(IDX2,dvtdr)- &
                 & SBUFFA(IDX2,vtheta)*drho_term(r)
@@ -364,15 +328,13 @@ Contains
         Call d_by_dphi(wsp%s2a,d2wdr2,ftemp1)    ! Store sintheta dwdtheta there for now.  We're going to use it a bit anyway.
         Call d_by_dtheta(wsp%s2a,dzdr,    ftemp2)       ! Will overwrite this with dTdtheta shortly
 
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(static,1)
         DO_IDX2
             ftemp1(mp)%data(IDX2) = ftemp1(mp)%data(IDX2)-ftemp2(mp)%data(IDX2)
         END_DO
         !$OMP END DO
 
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(static,1)
         DO_IDX2
             SBUFFA(IDX2,dvpdr) = ftemp1(mp)%data(IDX2)*Over_RhoR(r)
         END_DO
@@ -380,8 +342,7 @@ Contains
 
         ! .... Small correction for density variation  :  - u_phi*dlnrhodr
         ! .... moved -u_phi/r here as well
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(static,1)
         DO_IDX2
             SBUFFA(IDX2,dvpdr) = SBUFFA(IDX2,dvpdr)- &
                 &  SBUFFA(IDX2,vphi)*drho_term(r)
@@ -390,8 +351,7 @@ Contains
         !/////////////////////////////////////////
         ! dvrdr    overwrites dwdr
 
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(static,1)
         DO_IDX2
             SBUFFA(IDX2,dvrdr) = l_l_plus1(m:l_max)* &
                 & SBUFFA(IDX2,dvrdr)*Over_RhoRSQ(r)
@@ -399,8 +359,7 @@ Contains
         !$OMP END DO
 
 
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(static,1)
         DO_IDX2
             SBUFFA(IDX2,dvrdr) = SBUFFA(IDX2,dvrdr)- &
                 & SBUFFA(IDX2,vr)*Two_Over_R(r)
@@ -408,8 +367,7 @@ Contains
         !$OMP END DO
 
         ! .... Small correction for density variation  :  - u_r*dlnrhodr
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(static,1)
         DO_IDX2
             SBUFFA(IDX2,dvrdr) = SBUFFA(IDX2,dvrdr)- &
                 & SBUFFA(IDX2,vr)*ref%dlnrho(r)
@@ -421,8 +379,7 @@ Contains
 
 
         ! Convert Z to ell(ell+1) Z/r^2  (i.e. omega_r)
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(static,1)
         DO_IDX2
             SBUFFA(IDX2,zvar) = l_l_plus1(m:l_max)*SBUFFA(IDX2,zvar)*Over_RhoRSQ(r)
         END_DO
@@ -438,8 +395,7 @@ Contains
 
         !/////////////// BR /////////////////////
         ! First convert C to Br  ! Br overwrites C
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(static,1)
         DO_IDX2
             SBUFFA(IDX2,Br) = l_l_plus1(m:l_max)*SBUFFA(IDX2,Br)*OneOverRSquared(r)
         END_DO
@@ -447,8 +403,7 @@ Contains
 
         !////////////////// [Del x B]_r ///////////////////////////
         ! (does not overwrite any existing fields)
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(static,1)
         DO_IDX2
             SBUFFA(IDX2,curlbr) = l_l_plus1(m:l_max) &
                *SBUFFA(IDX2,Avar)*OneOverRSquared(r)
@@ -456,8 +411,7 @@ Contains
         !$OMP END DO
 
         ! Convert d2cdr2 to d2cdr2-Br (br = cl(l+1)/r^2
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(static,1)
         DO_IDX2
             SBUFFA(IDX2,d2cdr2) = SBUFFA(IDX2,d2cdr2)-SBUFFA(IDX2,Br)
         END_DO
@@ -469,8 +423,7 @@ Contains
 
         !////////// [Del x B]_phi //////////////////////////
         ! overwrite d_a_dr with d_d_phi(d_a_dr)
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(static,1)
         DO_IDX2
             SBUFFA(IDX2,dadr) = ftemp2(mp)%data(IDX2)
         END_DO
@@ -479,8 +432,7 @@ Contains
         Call d_by_dtheta(  wsp%s2a,d2cdr2,ftemp2)
 
         ! Add this term to d_d_phi(d_a_dr) to build rsintheta [del x b]_phi (overwrite dadr)
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(static,1)
         DO_IDX2
             SBUFFA(IDX2,curlbphi) = SBUFFA(IDX2,curlbphi)+ftemp2(mp)%data(IDX2)
             !SBUFFA(IDX2,curlbphi) = SBUFFA(IDX2,curlbphi)
@@ -491,8 +443,7 @@ Contains
         Call d_by_dphi(  wsp%s2a,d2cdr2,ftemp2)       ! get phi derivative of d2cdr2-Br
 
         ! Combine with ftemp1 to build rsintheta [del x B]_theta (overwrites d2cdr2)
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(static,1)
         DO_IDX2
             SBUFFA(IDX2,curlbtheta) = (ftemp1(mp)%data(IDX2)-ftemp2(mp)%data(IDX2))
         END_DO
@@ -506,8 +457,7 @@ Contains
 
 
         ! overwrite A with dA_d_phi
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(static,1)
         DO_IDX2
             SBUFFA(IDX2,Avar) = ftemp2(mp)%data(IDX2)
         END_DO
@@ -517,8 +467,7 @@ Contains
         Call d_by_dtheta(  wsp%s2a,dcdr,ftemp2)
 
         ! Add this term to dA_d_phi to build rsintheta B_theta
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(static,1)
         DO_IDX2
             SBUFFA(IDX2,Avar) = SBUFFA(IDX2,Avar)+ftemp2(mp)%data(IDX2)
         END_DO
@@ -528,8 +477,7 @@ Contains
         Call d_by_dphi(  wsp%s2a,dcdr,ftemp2)       ! get phi derivative of dcdr
 
         ! Combine with ftemp1 to build rsintheta B_phi
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(static,1)
         DO_IDX2
             SBUFFA(IDX2,dcdr) = ftemp2(mp)%data(IDX2)-ftemp1(mp)%data(IDX2)
         END_DO
@@ -539,6 +487,8 @@ Contains
     Subroutine Bfield_Derivatives()
         Implicit None
         Integer :: r, l, m, mp, imi
+
+        !$OMP PARALLEL
 
         ! These terms are only needed if we want to output
         ! inductions terms in the diagnostics
@@ -550,22 +500,19 @@ Contains
         Call d_by_dphi(ftemp4,    ftemp2)
 
 
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(static,1)
         DO_IDX2
             ftemp1(mp)%data(IDX2) = ftemp1(mp)%data(IDX2)+ftemp2(mp)%data(IDX2)
         END_DO
         !$OMP END DO
 
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(static,1)
         DO_IDX2
             ASBUFFA(IDX2,dbtdr_cb) = ftemp1(mp)%data(IDX2)*one_over_r(r)
         END_DO
         !$OMP END DO
 
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(static,1)
         DO_IDX2
             ASBUFFA(IDX2,dbtdr_cb) = ASBUFFA(IDX2,dbtdr_cb)- &
                 & SBUFFA(IDX2,btheta)*OneOverRSquared(r)  ! (take care) btheta is really rsintheta btheta
@@ -577,22 +524,19 @@ Contains
         Call d_by_dphi(ftemp3,ftemp1)
         Call d_by_dtheta(ftemp4,    ftemp2)
 
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(static,1)
         DO_IDX2
             ftemp1(mp)%data(IDX2) = ftemp1(mp)%data(IDX2)-ftemp2(mp)%data(IDX2)
         END_DO
         !$OMP END DO
 
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(static,1)
         DO_IDX2
             ASBUFFA(IDX2,dbpdr_cb) = ftemp1(mp)%data(IDX2)*one_over_r(r)
         END_DO
         !$OMP END DO
 
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(static,1)
         DO_IDX2
             ASBUFFA(IDX2,dbpdr_cb) = ASBUFFA(IDX2,dbpdr_cb)- &
                 &  SBUFFA(IDX2,bphi)*OneOverRSquared(r) ! (take care) bphi is really rsinthetabphi
@@ -602,8 +546,7 @@ Contains
         !/////////////////////////////////////////
         ! dB r dr  (dbrdr_cb holds dcdr up until this point)
 
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(static,1)
         DO_IDX2
             ASBUFFA(IDX2,dbrdr_cb) = l_l_plus1(m:l_max)* &
                 & ASBUFFA(IDX2,dbrdr_cb)*OneOverRSquared(r)
@@ -611,8 +554,7 @@ Contains
         !$OMP END DO
 
 
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(static,1)
         DO_IDX2
             ASBUFFA(IDX2,dbrdr_cb) = ASBUFFA(IDX2,dbrdr_cb)- &
                 & SBUFFA(IDX2,br)*Two_Over_R(r)
@@ -621,13 +563,13 @@ Contains
 
         ! sintheta dbrdt
         Call d_by_dtheta(wsp%s2a,br,ftemp1)
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(static,1)
         DO_IDX2
             ASBUFFA(IDX2,dbrdt_cb) = ftemp1(mp)%data(IDX2)
         END_DO
         !$OMP END DO
 
+        !$OMP END PARALLEL
 
     End Subroutine BField_Derivatives
 
@@ -643,30 +585,26 @@ Contains
             ! values will be overwritten in B and J are computed
         
             ! Convert A to ell(ell+1) A/r^2  (i.e. [curl B]_r)
-            ! Ryan-omp:
-            !$OMP DO PRIVATE(mp,m,imi,r)
+            !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(static,1)
             DO_IDX2
                 ASBUFFA(IDX2,avar_cb) = l_l_plus1(m:l_max)* &
                                         SBUFFA(IDX2,avar)*OneOverRSquared(r)
             END_DO
             !$OMP END DO NOWAIT
 
-            ! Ryan-omp:
-            !$OMP DO PRIVATE(mp,m,imi,r)
+            !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(static,1)
             DO_IDX2
                 ASBUFFA(IDX2,dbrdr_cb) = SBUFFA(IDX2,dcdr)
             END_DO
             !$OMP END DO NOWAIT
 
-            ! Ryan-omp:
-            !$OMP DO PRIVATE(mp,m,imi,r)
+            !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(static,1)
             DO_IDX2
                 ftemp3(mp)%data(IDX2)  = SBUFFA(IDX2,d2cdr2)
             END_DO
             !$OMP END DO NOWAIT
 
-            ! Ryan-omp:
-            !$OMP DO PRIVATE(mp,m,imi,r)
+            !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(static,1)
             DO_IDX2
                 ftemp4(mp)%data(IDX2) = SBUFFA(IDX2,dadr)
             END_DO
@@ -678,31 +616,26 @@ Contains
     Subroutine Hybrid_Output_Final()
         Implicit None
         Integer :: r, l, m, mp, imi
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(mp) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP PARALLEL
+        !$OMP DO PRIVATE(mp) SCHEDULE(static,1)
         Do mp = my_mp%min, my_mp%max
             ASBUFFA(l_max,:,:,:) = 0.0d0
         Enddo
         !$OMP END DO
         Call Hydro_Output_Derivatives()
+        !$OMP END PARALLEL
         If (magnetism) Then
             ! We compute some derivatives of B as well
             Call BField_Derivatives()
-            ! Ryan-omp: force a barrier so fields are not deallocated too soon
-            !$OMP BARRIER
-            !$OMP SINGLE
             Call Deallocate_rlm_Field(ftemp3)
             Call Deallocate_rlm_Field(ftemp4)
-            !$OMP END SINGLE
         Endif
-        !$OMP SINGLE
         Call cobuffer%construct('p2a')
         cobuffer%config = 'p2a'
         Call Legendre_Transform(cobuffer%s2a,cobuffer%p2a)
         Call cobuffer%deconstruct('s2a')
 
         Call cobuffer%reform()
-        !$OMP END SINGLE
 
     End Subroutine Hybrid_Output_Final
 
@@ -710,15 +643,16 @@ Contains
         Implicit None
         Integer :: m, mp, r,imi
 
+        !$OMP PARALLEL
         Call d_by_sdtheta(wsp%s2b, emfphi,ftemp1)
         Call d_by_dphi(wsp%s2b,emftheta,ftemp2)
+        !$OMP END PARALLEL
 
-        !$OMP SINGLE
         Call Allocate_rlm_Field(ftemp3)
-        !$OMP END SINGLE
+
+        !$OMP PARALLEL
         ! Copy out emf_theta before we overwrite it
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(static,1)
         DO_IDX2
             ftemp3(mp)%data(IDX2) = SBUFFB(IDX2,emftheta)
         END_DO
@@ -726,8 +660,7 @@ Contains
 
         ! Now for the C RHS, formed from the radial component of the curl of the emf
         ! cvar overwrites emftheta
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(static,1)
         DO_IDX2
             SBUFFB(IDX2,Cvar) = ( ftemp1(mp)%data(IDX2)- &
                 & ftemp2(mp)%data(IDX2) )*over_l_l_plus1(m:l_max)
@@ -737,26 +670,23 @@ Contains
 
         Call d_by_dphi(wsp%s2b,emfphi,ftemp2)
         ! Move ftemp3 (emftheta) into emfphi's old spot
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(static,1)
         DO_IDX2
             SBUFFB(IDX2,emfphi)=ftemp3(mp)%data(IDX2)
         END_DO
         !$OMP END DO
         Call d_by_sdtheta(wsp%s2b, emfphi,ftemp1)
 
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(mp,m,imi,r) SCHEDULE(static,1)
         DO_IDX2
             SBUFFB(IDX2,emfphi) = ( ftemp2(mp)%data(IDX2)+ &
                 & ftemp1(mp)%data(IDX2) )*over_l_l_plus1(m:l_max)
         END_DO
         !$OMP END DO
 
-        ! Ryan-omp: omp enddo has implicit barrier so fields are not deallocated too soon
-        !$OMP SINGLE
+        !$OMP END PARALLEL
+
         Call DeAllocate_rlm_Field(ftemp3)
-        !$OMP END SINGLE
         ! Ensure there is no ell=0 emf  -- should I do this?
         !rmn1 = (emfr-1)    *tnr+1
         !rmn2 = (emftheta-1)*tnr+1

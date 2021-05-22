@@ -27,8 +27,6 @@ Module Spectral_Derivatives
     Integer :: nm_local
     Integer, Private :: lmax, tnrl,nrl
 
-    Integer, Private :: loop_chunk_size = 2
-
     !These routines compute sin(theta)dA_by_dtheta
     Interface d_by_dtheta
         Module Procedure d_dtheta_single,d_dtheta_buffer, d_dtheta_buff2arr
@@ -100,8 +98,7 @@ Subroutine d_dtheta_single(A,B)
     Type(rmcontainer), Intent(InOut) :: A(1:),B(1:)
     Integer :: i, m, l, k
     ! Computes B = sin(theta)dA_by_d_theta
-    ! Ryan-omp:
-    !$OMP DO PRIVATE(i,m,k,l) SCHEDULE(dynamic,loop_chunk_size)
+    !$OMP DO PRIVATE(i,m,k,l) SCHEDULE(static,1)
     Do i = 1, nm_local
         m = mlocal(i)
         If (m .ne. lmax) Then
@@ -129,8 +126,7 @@ Subroutine d_dtheta_single3D(A,B)
     Type(rmcontainer3D), Intent(InOut) :: A(1:),B(1:)
     Integer :: i, m, l
     ! Computes B = sin(theta)dA_by_d_theta
-    ! Ryan-omp:
-    !$OMP DO PRIVATE(i,m,l) SCHEDULE(dynamic,loop_chunk_size)
+    !$OMP DO PRIVATE(i,m,l) SCHEDULE(static,1)
        Do i = 1, nm_local
         m = mlocal(i)
         If (m .ne. lmax) Then
@@ -152,8 +148,7 @@ Subroutine d_sdtheta_single(A,B)
     Type(rmcontainer), Intent(InOut) :: A(1:),B(1:)
     Integer :: i, m, l, k
     ! Computes B = 1/sin(theta)d(sin^2 A)_by_d_theta
-    ! Ryan-omp:
-    !$OMP DO PRIVATE(i,m,k,l) SCHEDULE(dynamic,loop_chunk_size)
+    !$OMP DO PRIVATE(i,m,k,l) SCHEDULE(static,1)
     Do i = 1, nm_local
         m = mlocal(i)
         If (m .ne. lmax) Then
@@ -180,8 +175,7 @@ subroutine d_sdtheta_single3D(A,B)
     Type(rmcontainer3D), Intent(InOut) :: A(1:),B(1:)
     Integer :: i, m, l
     ! Computes B = 1/sin(theta)d(sin^2 A)_by_d_theta
-    ! Ryan-omp:
-    !$OMP DO PRIVATE(i,m,l) SCHEDULE(dynamic,loop_chunk_size)
+    !$OMP DO PRIVATE(i,m,l) SCHEDULE(static,1)
     Do i = 1, nm_local
         m = mlocal(i)
         If (m .ne. lmax) Then
@@ -207,7 +201,7 @@ Subroutine d_dtheta_buffer(A,fin,fout)
     ind1 = (fin-1)*tnrl
     ind2 = (fout-1)*tnrl
     ! Ryan-omp: is the inner stuff thread safe and/or race-condition-safe???
-    !$OMP DO PRIVATE(i,m,k,l) SCHEDULE(dynamic,loop_chunk_size)
+    !$OMP DO PRIVATE(i,m,k,l) SCHEDULE(static,1)
     Do i = 1, nm_local
         m = mlocal(i)
         If ( m .ne. lmax) Then
@@ -236,7 +230,7 @@ Subroutine d_dtheta_buffer4D(A,fin,fout)
     ind1 = (fin-1)*tnrl
     ind2 = (fout-1)*tnrl
     ! Ryan-omp: is the inner stuff thread safe and/or race-condition-safe???
-    !$OMP DO PRIVATE(i,m,l) SCHEDULE(dynamic,loop_chunk_size)
+    !$OMP DO PRIVATE(i,m,l) SCHEDULE(static,1)
     Do i = 1, nm_local
         m = mlocal(i)
         If ( m .ne. lmax) Then
@@ -264,7 +258,7 @@ Subroutine d_sdtheta_buffer(A,fin,fout)
     ind1 = (fin-1)*tnrl
     ind2 = (fout-1)*tnrl
     ! Ryan-omp: is the inner stuff thread safe and/or race-condition-safe???
-    !$OMP DO PRIVATE(i,m,k,l) SCHEDULE(dynamic,loop_chunk_size)
+    !$OMP DO PRIVATE(i,m,k,l) SCHEDULE(static,1)
     Do i = 1, nm_local
         m = mlocal(i)
         If (m .ne. lmax) Then
@@ -290,7 +284,7 @@ subroutine d_sdtheta_buffer4d(A,fin,fout)
     Integer, Intent(In) :: fin, fout
     Integer :: i, m, l
     ! Ryan-omp: is the inner stuff thread safe and/or race-condition-safe???
-    !$OMP DO PRIVATE(i,m,l) SCHEDULE(dynamic,loop_chunk_size)
+    !$OMP DO PRIVATE(i,m,l) SCHEDULE(static,1)
     Do i = 1, nm_local
         m = mlocal(i)
         If (m .ne. lmax) Then
@@ -314,8 +308,7 @@ Subroutine d_dtheta_buff2arr(A,fin,arr)
     Integer :: i, m, k, l
     Integer :: ind1
     ind1 = (fin-1)*tnrl
-    ! Ryan-omp:
-    !$OMP DO PRIVATE(i,m,k,l) SCHEDULE(dynamic,loop_chunk_size)
+    !$OMP DO PRIVATE(i,m,k,l) SCHEDULE(static,1)
     Do i = 1, nm_local
         m = mlocal(i)
         if (m .ne. lmax) then
@@ -342,8 +335,7 @@ Subroutine d_dtheta_4dbuff2arr(A,fin,arr)
     Type(rmcontainer3d), Intent(InOut) :: arr(1:)
     Integer, Intent(In) :: fin
     Integer :: i, m, l
-    ! Ryan-omp:
-    !$OMP DO PRIVATE(i,m,l) SCHEDULE(dynamic,loop_chunk_size)
+    !$OMP DO PRIVATE(i,m,l) SCHEDULE(static,1)
     Do i = 1, nm_local
         m = mlocal(i)
         if (m .ne. lmax) then
@@ -370,8 +362,7 @@ Subroutine d_sdtheta_buff2arr(A,fin,arr)
     Integer :: i, m, k, l
     Integer :: ind1
     ind1 = (fin-1)*tnrl
-    ! Ryan-omp:
-    !$OMP DO PRIVATE(i,m,k,l) SCHEDULE(dynamic,loop_chunk_size)
+    !$OMP DO PRIVATE(i,m,k,l) SCHEDULE(static,1)
     Do i = 1, nm_local
         m = mlocal(i)
         if (m .ne. lmax) then
@@ -397,8 +388,7 @@ Subroutine d_sdtheta_4dbuff2arr(A,fin,arr)
     Type(rmcontainer3d), Intent(InOut) :: arr(1:)
     Integer, Intent(In) :: fin
     Integer :: i, m, l
-    ! Ryan-omp:
-    !$OMP DO PRIVATE(i,m,l) SCHEDULE(dynamic,loop_chunk_size)
+    !$OMP DO PRIVATE(i,m,l) SCHEDULE(static,1)
     Do i = 1, nm_local
         m = mlocal(i)
         if (m .ne. lmax) then
@@ -432,7 +422,7 @@ End Subroutine d_sdtheta_4dbuff2arr
         nj = ashape(3)
         nk = ashape(1)
         ! Ryan-omp: is the inner stuff thread safe and/or race-condition-safe???
-        !$OMP DO PRIVATE(i,j,k,m) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(i,j,k,m) SCHEDULE(static,1)
         Do j = 1, nj
             Do i = 1, ni
                 Do k = 1, nk,2
@@ -457,7 +447,7 @@ End Subroutine d_sdtheta_4dbuff2arr
         nk = ashape(1)
         If (from_ind .ne. to_ind) Then
             ! Ryan-omp: is the inner stuff thread safe and/or race-condition-safe???
-            !$OMP DO PRIVATE(i,j,k,m) SCHEDULE(dynamic,loop_chunk_size)
+            !$OMP DO PRIVATE(i,j,k,m) SCHEDULE(static,1)
             Do j = 1, nj
                 Do i = 1, ni
                     Do k = 1, nk,2
@@ -470,7 +460,7 @@ End Subroutine d_sdtheta_4dbuff2arr
             !$OMP END DO
         Else
             ! Ryan-omp: is the inner stuff thread safe and/or race-condition-safe???
-            !$OMP DO PRIVATE(i,j,k,m,tmp) SCHEDULE(dynamic,loop_chunk_size)
+            !$OMP DO PRIVATE(i,j,k,m,tmp) SCHEDULE(static,1)
             Do j = 1, nj
                 Do i = 1, ni
                     Do k = 1, nk,2
@@ -498,8 +488,7 @@ End Subroutine d_sdtheta_4dbuff2arr
         rrstart = (from_ind-1)*tnrl+1
         rmid = rrstart+nrl
         irend = rrstart+tnrl-1
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(i,m) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(i,m) SCHEDULE(static,1)
         Do i = 1, nm_local
                 m = mlocal(i)
                 arr(i)%data(:,1:nrl)      = -m*buff(i)%data(:,rmid:irend)
@@ -517,8 +506,7 @@ End Subroutine d_sdtheta_4dbuff2arr
         Type(rmcontainer3d), Intent(InOut) :: arr(1:)
         Integer, Intent(In) :: from_ind
         Integer :: i, m
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(i,m) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(i,m) SCHEDULE(static,1)
         Do i = 1, nm_local
                 m = mlocal(i)
                 arr(i)%data(:,:,1) = -m*buff(i)%data(:,:,2,from_ind)
@@ -534,8 +522,7 @@ End Subroutine d_sdtheta_4dbuff2arr
         Type(rmcontainer3d), Intent(InOut) :: arr1(1:), arr2(1:)
 
         Integer :: i, m
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(i,m) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP DO PRIVATE(i,m) SCHEDULE(static,1)
         Do i = 1, nm_local
                 m = mlocal(i)
                 arr2(i)%data(:,:,1) = -m*arr1(i)%data(:,:,2)
@@ -566,7 +553,7 @@ End Subroutine d_sdtheta_4dbuff2arr
             rmid2 = rrstart2+nrl
             irend2 = rrstart2+tnrl-1
             ! Ryan-omp: is the inner stuff thread safe and/or race-condition-safe???
-            !$OMP DO PRIVATE(i,m) SCHEDULE(dynamic,loop_chunk_size)
+            !$OMP DO PRIVATE(i,m) SCHEDULE(static,1)
             Do i = 1, nm_local
                 m = mlocal(i)
                 buff(i)%data(:,rrstart2:rmid2-1) = -m*buff(i)%data(:,rmid:irend)
@@ -575,11 +562,9 @@ End Subroutine d_sdtheta_4dbuff2arr
             !$OMP END DO
         Else
             ! in-place
-            !$OMP SINGLE
             Allocate(temp(0:lmax,1:nrl))
-            !$OMP END SINGLE
             ! Ryan-omp: is the inner stuff thread safe and/or race-condition-safe???
-            !$OMP DO PRIVATE(i,m,temp) SCHEDULE(dynamic,loop_chunk_size)
+            !$OMP DO PRIVATE(i,m,temp) SCHEDULE(static,1)
             Do i = 1, nm_local
                 m = mlocal(i)
                 temp(m:lmax,1:nrl) = buff(i)%data(m:lmax,rrstart:rmid-1)    ! save the real piece
@@ -588,10 +573,7 @@ End Subroutine d_sdtheta_4dbuff2arr
 
             Enddo
             !$OMP END DO
-            ! Ryan-omp: omp end do has implicit barrier, so temp will not be deallocated too soon
-            !$OMP SINGLE
             DeAllocate(temp)
-            !$OMP END SINGLE
         Endif
 
     End Subroutine d_by_dphi_rlmbuff
@@ -608,7 +590,7 @@ End Subroutine d_sdtheta_4dbuff2arr
 
         If (from_ind .ne. to_ind) Then
             ! Ryan-omp: is the inner stuff thread safe and/or race-condition-safe???
-            !$OMP DO PRIVATE(i,m) SCHEDULE(dynamic,loop_chunk_size)
+            !$OMP DO PRIVATE(i,m) SCHEDULE(static,1)
             Do i = 1, nm_local
                 m = mlocal(i)
                 buff(i)%data(:,:,1,to_ind) = -m*buff(i)%data(:,:,2,from_ind)
@@ -617,11 +599,9 @@ End Subroutine d_sdtheta_4dbuff2arr
             !$OMP END DO
         Else
             ! in-place
-            !$OMP SINGLE
             Allocate(temp(0:lmax,1:nrl))
-            !$OMP END SINGLE
             ! Ryan-omp: is the inner stuff thread safe and/or race-condition-safe???
-            !$OMP DO PRIVATE(i,m,temp) SCHEDULE(dynamic,loop_chunk_size)
+            !$OMP DO PRIVATE(i,m,temp) SCHEDULE(static,1)
             Do i = 1, nm_local
                 m = mlocal(i)
                 temp(m:lmax,:) = buff(i)%data(m:lmax,:,1,from_ind)
@@ -629,10 +609,7 @@ End Subroutine d_sdtheta_4dbuff2arr
                 buff(i)%data(m:lmax,:,2,from_ind) = m*temp(m:lmax,:)
             Enddo
             !$OMP END DO
-            ! Ryan-omp: omp end do has implicit barrier, so temp will not be deallocated too soon
-            !$OMP SINGLE
             DeAllocate(temp)
-            !$OMP END SINGLE
         Endif
 
     End Subroutine d_by_dphi_rlmbuff4d

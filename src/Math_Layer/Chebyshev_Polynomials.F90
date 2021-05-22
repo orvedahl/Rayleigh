@@ -30,8 +30,6 @@ Module Chebyshev_Polynomials
     Logical :: initialized = .false.
     Logical, Private :: use_extrema = .false. ! Set to true to use extrema points instead of zeros for T_Nmax
 
-    Integer, Private :: loop_chunk_size = 2
-
     Type, Public :: Cheby_Grid
         Integer :: domain_count = 0  ! Number of subdomains for this grid object
         Integer ::    max_npoly = 0  ! maximum number of (aliased) polynomials within any domain
@@ -570,7 +568,6 @@ Contains
         Real*8,  Intent(InOut) :: buffer(0:,1:,1:,1:)    ! Makes it easier to reconcile with my IDL code
         Integer, Intent(In)    :: ind, dind, dorder
         Real*8, Allocatable :: dbuffer(:,:,:)
-        !Real*8, Allocatable :: dbuffer(:,:)
         Integer :: dims(4), n,n2,n3, i,j,k, order
         Integer :: kstart, kend, nthr,trank
         Integer :: nglobal, nsub, hoff, hh
@@ -581,8 +578,7 @@ Contains
         n2 = dims(2)
         n3 = dims(3)
         If (ind .ne. dind) Then
-            ! Ryan-omp:
-            !$OMP DO PRIVATE(i,j,k,hh,hoff,n) SCHEDULE(dynamic,loop_chunk_size) COLLAPSE(2)
+            !$OMP PARALLEL DO PRIVATE(i,j,k,hh,hoff,n) SCHEDULE(static,1) COLLAPSE(2)
             Do k = 1, n3
                 Do j = 1, n2
                     hoff = 0
@@ -600,25 +596,22 @@ Contains
                     Enddo !hh
                 Enddo
             Enddo
-            !$OMP END DO
+            !$OMP END PARALLEL DO
             If (dorder .gt. 1) Then
-                ! Ryan-omp: (end single is implicit barrier)
-                !$OMP SINGLE
                 Allocate(dbuffer(0:nglobal-1,1:dorder,0:cp_nthreads-1))
-                !Allocate(dbuffer(0:nglobal-1,1:dorder))
-                !!$OMP END SINGLE
 
-!#ifdef useomp
-!                trank = omp_get_thread_num()
-!                nthr  = omp_get_num_threads()
-!                kstart = (trank*n3)/nthr+1
-!                kend = ((trank+1)*n3)/nthr
-!#else
+                !$OMP PARALLEL PRIVATE(i,j,k,trank,order,kstart,kend,nthr,n,hh,hoff)
+
+#ifdef useomp
+                trank = omp_get_thread_num()
+                nthr  = omp_get_num_threads()
+                kstart = (trank*n3)/nthr+1
+                kend = ((trank+1)*n3)/nthr
+#else
                 trank = 0
                 kstart = 1
                 kend = n3
-!#endif
-                ! manually OMP-ify the loop (using omp do private... gives a seg fault???)
+#endif
                 Do k = kstart,kend
                     Do j = 1, n2
                         dbuffer(:,1,trank) = buffer(:,j,k,dind)
@@ -638,47 +631,19 @@ Contains
                         buffer(:,j,k,dind) = dbuffer(:,dorder,trank)
                     Enddo
                 Enddo
-                ! Ryan-omp: is this thread-safe and/or race-condition-safe?
-                !!$OMP DO PRIVATE(i,j,k,order,n,hh,hoff) SCHEDULE(dynamic,loop_chunk_size)
-                !Do k = 1, n3
-                !    Do j = 1, n2
-                !        dbuffer(:,1) = buffer(:,j,k,dind)
-                !        Do order = 2, dorder
-                !            hoff = 0
-                !            Do hh = 1, nsub
-                !                n = self%npoly(hh)
-                !                dbuffer(hoff+n-1,order) = 0.0d0
-                !                dbuffer(hoff+n-2,order) = 2.0d0*(n-1)*dbuffer(hoff+n-1,order-1)
-                !                Do i = n -3, 0, -1
-                !                    dbuffer(hoff+i,order) = dbuffer(hoff+i+2,order)+ &
-                !                        & 2.0d0*(i+1)*dbuffer(hoff+i+1,order-1)
-                !                Enddo
-                !                hoff = hoff+self%npoly(hh)
-                !            Enddo
-                !        Enddo
-                !        buffer(:,j,k,dind) = dbuffer(:,dorder)
-                !    Enddo
-                !Enddo
-                !!$OMP END DO
-
-                ! Ryan-omp: (end single is implicit barrier) force barrier so array is not
-                ! deallocated before other threads are done using it
-                !!$OMP BARRIER
-                !!$OMP SINGLE
+                !$OMP END PARALLEL DO
                 DeAllocate(dbuffer)
-                !$OMP END SINGLE
             Endif
         Else
             ! In-place -- Needs developing
         Endif
-        ! Ryan-omp:
-        !$OMP DO PRIVATE(j,k) SCHEDULE(dynamic,loop_chunk_size)
+        !$OMP PARALLEL DO PRIVATE(j,k) SCHEDULE(static,1)
         Do k = 1, n3
             Do j = 1, n2
                 buffer(:,j,k,dind) = buffer(:,j,k,dind)*(self%deriv_scaling(:)**dorder)
             Enddo
         Enddo
-        !$OMP END DO
+        !$OMP END PARALLEL DO
     End Subroutine Cheby_Deriv_Buffer_4D
 
 End Module Chebyshev_Polynomials
