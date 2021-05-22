@@ -631,7 +631,7 @@ Contains
                         buffer(:,j,k,dind) = dbuffer(:,dorder,trank)
                     Enddo
                 Enddo
-                !$OMP END PARALLEL DO
+                !$OMP END PARALLEL
                 DeAllocate(dbuffer)
             Endif
         Else
