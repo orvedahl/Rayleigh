@@ -177,6 +177,10 @@ Contains
             call stdout%print(" ---- NPROW : "//trim(istr))
             Write(istr,'(i6)')self%npcol
             call stdout%print(" ---- NPCOL : "//trim(istr))
+#ifdef useomp
+            Write(istr,'(i6)')self%nthreads
+            call stdout%print(" ---- NOMP  : "//trim(istr))
+#endif
         Endif
         If (self%nprow .le. 1) Then
             If (self%gcomm%rank .eq. 0) Then
