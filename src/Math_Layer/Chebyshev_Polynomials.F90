@@ -560,7 +560,7 @@ Contains
     End Subroutine From_Spectral4D
 
     Subroutine Cheby_Deriv_Buffer_4D(self,ind,dind,buffer,dorder)
-#ifdef useomp
+#ifdef USE_OMP
         Use Omp_lib
 #endif
         Implicit None
@@ -602,7 +602,7 @@ Contains
 
                 !$OMP PARALLEL PRIVATE(i,j,k,trank,order,kstart,kend,nthr,n,hh,hoff)
 
-#ifdef useomp
+#ifdef USE_OMP
                 trank = omp_get_thread_num()
                 nthr  = omp_get_num_threads()
                 kstart = (trank*n3)/nthr+1

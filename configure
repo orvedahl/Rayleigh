@@ -570,8 +570,8 @@ else
   # should be set regardless of what compiler flags are used
   if [ "$USEOPENMP" == "TRUE" ]
   then
-          OPT_FLAGS="$OPT_FLAGS -Duseomp"
-          DBG_FLAGS="$DBG_FLAGS -Duseomp"
+          OPT_FLAGS="$OPT_FLAGS -DUSE_OMP"
+          DBG_FLAGS="$DBG_FLAGS -DUSE_OMP"
   fi
 
   echo ' '

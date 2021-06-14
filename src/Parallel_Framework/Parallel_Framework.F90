@@ -177,10 +177,6 @@ Contains
             call stdout%print(" ---- NPROW : "//trim(istr))
             Write(istr,'(i6)')self%npcol
             call stdout%print(" ---- NPCOL : "//trim(istr))
-#ifdef useomp
-            Write(istr,'(i6)')self%nthreads
-            call stdout%print(" ---- NOMP  : "//trim(istr))
-#endif
         Endif
         If (self%nprow .le. 1) Then
             If (self%gcomm%rank .eq. 0) Then
@@ -254,14 +250,14 @@ Contains
     End Subroutine Broadcast_Intarr
 
     Subroutine OpenMp_Init(self)
-#ifdef useomp
+#ifdef USE_OMP
         Use Omp_lib
 #endif
 
         Class(Parallel_Interface) :: self
         Integer :: my_mpi_rank,my_thread
         my_mpi_rank = pfi%gcomm%rank
-#ifdef useomp
+#ifdef USE_OMP
         self%nthreads = omp_get_max_threads()
         !$OMP PARALLEL PRIVATE(my_thread)
         my_thread = omp_get_thread_num()
@@ -271,6 +267,10 @@ Contains
 #ifdef usemkl
             my_thread = mkl_get_max_threads()
             write(6,*)"MKL MAX: ", my_thread
+#endif
+#ifdef USE_OMP
+            Write(istr,'(i6)')self%nthreads
+            call stdout%print(" ---- NOMP  : "//trim(istr))
 #endif
     End Subroutine OpenMp_Init
 
