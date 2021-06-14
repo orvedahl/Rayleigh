@@ -256,6 +256,7 @@ Contains
 
         Class(Parallel_Interface) :: self
         Integer :: my_mpi_rank,my_thread
+        Character*6 :: istr
         my_mpi_rank = pfi%gcomm%rank
 #ifdef USE_OMP
         self%nthreads = omp_get_max_threads()
