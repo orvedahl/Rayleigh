@@ -258,20 +258,20 @@ Contains
         Integer :: my_mpi_rank,my_thread
         Character*6 :: istr
         my_mpi_rank = pfi%gcomm%rank
-#ifdef USE_OMP
-        self%nthreads = omp_get_max_threads()
-        !$OMP PARALLEL PRIVATE(my_thread)
-        my_thread = omp_get_thread_num()
-        write(6,*)'rank: ', my_mpi_Rank, 'thread: ', my_thread, 'nthread: ', omp_get_num_threads()
-        !$OMP END PARALLEL
-#endif
 #ifdef usemkl
             my_thread = mkl_get_max_threads()
             write(6,*)"MKL MAX: ", my_thread
 #endif
 #ifdef USE_OMP
-            Write(istr,'(i6)')self%nthreads
-            call stdout%print(" ---- NOMP  : "//trim(istr))
+        self%nthreads = omp_get_max_threads()
+        !$OMP PARALLEL PRIVATE(my_thread,istr)
+        my_thread = omp_get_thread_num()
+        !write(6,*)'rank: ', my_mpi_Rank, 'thread: ', my_thread, 'nthread: ', omp_get_num_threads()
+        Write(istr,'(i6)')self%nthreads
+        !$OMP SINGLE
+        call stdout%print(" ---- NOMP  : "//trim(istr))
+        !$OMP END SINGLE
+        !$OMP END PARALLEL
 #endif
     End Subroutine OpenMp_Init
 
