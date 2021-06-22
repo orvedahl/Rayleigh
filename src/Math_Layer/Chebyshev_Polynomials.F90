@@ -559,7 +559,7 @@ Contains
     End Subroutine From_Spectral4D
 
     Subroutine Cheby_Deriv_Buffer_4D(self,ind,dind,buffer,dorder)
-#ifdef useomp
+#ifdef USE_OMP
         Use Omp_lib
 #endif
         Implicit None
@@ -568,7 +568,7 @@ Contains
         Integer, Intent(In)    :: ind, dind, dorder
         Real*8, Allocatable :: dbuffer(:,:,:)
         Integer :: dims(4), n,n2,n3, i,j,k, order
-        Integer :: kstart, kend, trank
+        Integer :: kstart, kend, trank, nthr
         Integer :: nglobal, nsub, hoff, hh
         dims = shape(buffer)
         nglobal = dims(1)
@@ -599,7 +599,7 @@ Contains
             If (dorder .gt. 1) Then
                 Allocate(dbuffer(0:nglobal-1,1:dorder,0:cp_nthreads-1))
             !$OMP PARALLEL PRIVATE(i,j,k,trank,order,kstart,kend,nthr,n,hh,hoff)
-#ifdef useomp
+#ifdef USE_OMP
                 trank = omp_get_thread_num()
                   nthr  = omp_get_num_threads()
                   kstart = (trank*n3)/nthr+1

@@ -38,10 +38,10 @@ Contains
         Use Parallel_Framework, Only : pfi
         Implicit None
         ! Really just here for openmp init
-        integer :: nthread
+        integer :: nthread, iret
 
         nthread = pfi%nthreads
-#ifdef useomp
+#ifdef USE_OMP
         if (nthread .gt. 1) Then
             call dfftw_init_threads(iret)
                 !Note that when using MKL, iret will be 0 always.

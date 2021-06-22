@@ -248,14 +248,14 @@ Contains
     End Subroutine Broadcast_Intarr
 
     Subroutine OpenMp_Init(self)
-#ifdef useomp
+#ifdef USE_OMP
         Use Omp_lib
 #endif
 
         Class(Parallel_Interface) :: self
-        Integer :: my_mpi_rank
+        Integer :: my_mpi_rank, my_thread
         my_mpi_rank = pfi%gcomm%rank
-#ifdef useomp
+#ifdef USE_OMP
         self%nthreads = omp_get_max_threads()
         !$OMP PARALLEL PRIVATE(my_thread)
         my_thread = omp_get_thread_num()
